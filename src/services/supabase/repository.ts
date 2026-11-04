@@ -2,7 +2,7 @@ import { FunctionsHttpError } from '@supabase/supabase-js'
 import type { ActivityDetail, NormalizedBundle, SyncStatus, UserProfile } from '@shared/domain.ts'
 import { todayInBerlin, addDays } from '@shared/dates.ts'
 import { getSupabase } from './client.ts'
-import { connectionRowSchema, toActivity, toDaily, toDetail, toIntraday, toProfile, toSleep } from './rows.ts'
+import { connectionRowSchema, toActivity, toBody, toDaily, toDetail, toFitnessAge, toHrZone, toIntraday, toProfile, toSleep } from './rows.ts'
 import type { FitnessRepository } from '../data/repository.ts'
 
 const PAGE = 1000
@@ -20,6 +20,15 @@ async function fetchAll(table: string, orderBy: string, filter?: RowFilter): Pro
     if (error) throw new Error(error.message)
     rows.push(...(data ?? []))
     if (!data || data.length < PAGE) return rows
+  }
+}
+
+/** Tables from newer migrations: a missing table (migration not applied yet) must not take the whole app down. */
+async function fetchOptional(table: string, orderBy: string): Promise<unknown[]> {
+  try {
+    return await fetchAll(table, orderBy)
+  } catch {
+    return []
   }
 }
 
@@ -53,13 +62,24 @@ export function createSupabaseRepository(): FitnessRepository {
 
     async loadBundle(): Promise<NormalizedBundle> {
       const intradayFrom = addDays(todayInBerlin(), -(INTRADAY_DAYS - 1))
-      const [daily, sleep, activities, intraday] = await Promise.all([
+      const [daily, sleep, activities, intraday, body, fitnessAge, hrZones] = await Promise.all([
         fetchAll('daily_metrics', 'date'),
         fetchAll('sleep_sessions', 'date'),
         fetchAll('activities', 'start_time', { column: 'duplicate_of', op: 'is-null' }),
         fetchAll('intraday_samples', 'date', { column: 'date', op: 'gte', value: intradayFrom }),
+        fetchOptional('body_composition', 'date'),
+        fetchOptional('fitness_age', 'date'),
+        fetchOptional('hr_zone_configs', 'sport'),
       ])
-      return { daily: daily.map(toDaily), sleep: sleep.map(toSleep), activities: activities.map(toActivity), intraday: intraday.map(toIntraday) }
+      return {
+        daily: daily.map(toDaily),
+        sleep: sleep.map(toSleep),
+        activities: activities.map(toActivity),
+        intraday: intraday.map(toIntraday),
+        body: body.map(toBody),
+        fitnessAge: fitnessAge.map(toFitnessAge),
+        hrZones: hrZones.map(toHrZone),
+      }
     },
 
     async loadProfile(): Promise<UserProfile> {
