@@ -5,6 +5,8 @@
  * These types never leave the Garmin adapter.
  */
 
+import type { ActivityExtra, BodyBatteryEvent, SleepAlignment, SleepNap, SleepNeed, SleepScoreFactor } from '../domain.ts'
+
 export interface GarminDaily {
   summaryId: string
   calendarDate: string
@@ -28,6 +30,21 @@ export interface GarminDaily {
   bodyBatteryDrainedValue?: number
   bodyBatteryHighestValue?: number
   bodyBatteryLowestValue?: number
+  bodyBatteryEndOfDayValue?: number
+  bodyBatteryEvents?: BodyBatteryEvent[]
+  avgRespirationBreathsPerMinute?: number
+  minRespirationBreathsPerMinute?: number
+  maxRespirationBreathsPerMinute?: number
+  avgSpo2Percent?: number
+  minSpo2Percent?: number
+  hydrationConsumedMl?: number
+  hydrationGoalMl?: number
+  sweatLossMl?: number
+  restStressDurationInSeconds?: number
+  lowStressDurationInSeconds?: number
+  mediumStressDurationInSeconds?: number
+  highStressDurationInSeconds?: number
+  activityStressDurationInSeconds?: number
   /** Offset in seconds from `startTimeInSeconds` → bpm. */
   timeOffsetHeartRateSamples?: Record<string, number>
 }
@@ -54,6 +71,22 @@ export interface GarminSleep {
   overallSleepScore?: { value: number; qualifierKey?: string }
   avgRespirationBreathsPerMinute?: number
   avgSpo2Percent?: number
+  napDurationInSeconds?: number
+  awakeCount?: number
+  avgSleepStress?: number
+  avgHeartRateInBeatsPerMinute?: number
+  lowestSpo2Percent?: number
+  highestSpo2Percent?: number
+  spo2EventsBelowThreshold?: number
+  lowestRespirationBreathsPerMinute?: number
+  highestRespirationBreathsPerMinute?: number
+  breathingDisruptionSeverity?: string
+  scoreFeedback?: string
+  scoreInsight?: string
+  scoreFactors?: Record<string, SleepScoreFactor>
+  need?: SleepNeed
+  naps?: SleepNap[]
+  alignment?: SleepAlignment
 }
 
 export interface GarminHrv {
@@ -63,6 +96,9 @@ export interface GarminHrv {
   lastNight5MinHigh?: number
   weeklyAvg?: number
   status?: 'BALANCED' | 'UNBALANCED' | 'LOW' | 'POOR'
+  baselineBalancedLow?: number
+  baselineBalancedUpper?: number
+  feedbackPhrase?: string
 }
 
 export interface GarminUserMetrics {
@@ -97,6 +133,7 @@ export interface GarminActivity {
   timeInHeartRateZonesInSeconds?: number[]
   startingLatitudeInDegree?: number
   startingLongitudeInDegree?: number
+  extra?: ActivityExtra
 }
 
 export interface GarminActivitySample {
@@ -130,6 +167,48 @@ export interface GarminActivityDetails {
   splits?: GarminSplit[]
 }
 
+export interface GarminWeight {
+  calendarDate: string
+  measuredAtInSeconds?: number
+  weightKg?: number
+  bmi?: number
+  bodyFatPercent?: number
+  bodyWaterPercent?: number
+  muscleMassKg?: number
+  boneMassKg?: number
+  visceralFat?: number
+  physiqueRating?: number
+  metabolicAge?: number
+}
+
+export interface GarminFitnessAge {
+  calendarDate: string
+  chronologicalAge?: number
+  fitnessAge?: number
+  achievableFitnessAge?: number
+  previousFitnessAge?: number
+  components?: Record<
+    string,
+    { value?: number; targetValue?: number; improvementValue?: number; potentialAge?: number; priority?: number; lastMeasurementDate?: string }
+  >
+}
+
+export interface GarminHrZones {
+  sport: string
+  trainingMethod?: string
+  restingHeartRate?: number
+  lactateThresholdHeartRate?: number
+  maxHeartRate?: number
+  zoneFloors: number[]
+}
+
+/** Per-day intraday series that the daily summaries do not carry (HRV readings during sleep, SpO2 readings). */
+export interface GarminIntradaySeries {
+  calendarDate: string
+  metric: 'hrv' | 'spo2'
+  points: [number, number][]
+}
+
 /** Untouched provider response item, stored so normalization can be re-run later. */
 export interface GarminRawRecord {
   resourceType: string
@@ -145,6 +224,10 @@ export interface GarminRangePayload {
   hrv: GarminHrv[]
   userMetrics: GarminUserMetrics[]
   activities: GarminActivity[]
+  weights: GarminWeight[]
+  fitnessAge: GarminFitnessAge[]
+  hrZones: GarminHrZones[]
+  intradayExtra: GarminIntradaySeries[]
   /** Original provider responses; when absent the mapped items above are stored as raw records. */
   raw?: GarminRawRecord[]
 }

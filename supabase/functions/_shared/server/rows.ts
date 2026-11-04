@@ -1,4 +1,4 @@
-import type { Activity, ActivityDetail, DailyMetrics, IntradaySeries, ProviderId, SleepSession } from '../domain.ts'
+import type { Activity, ActivityDetail, BodyComposition, DailyMetrics, FitnessAge, HrZoneConfig, IntradaySeries, ProviderId, SleepSession } from '../domain.ts'
 
 /** Mapping between the normalized domain model and the snake_case Postgres rows. Mirrors src/services/supabase/rows.ts. */
 
@@ -32,6 +32,25 @@ export const dailyToRow = (userId: string, d: DailyMetrics): Row => ({
   hrv_weekly_avg: d.hrvWeeklyAvg,
   hrv_status: d.hrvStatus,
   vo2_max: d.vo2Max,
+  respiration_avg: d.respirationAvg,
+  respiration_min: d.respirationMin,
+  respiration_max: d.respirationMax,
+  spo2_avg: d.spo2Avg,
+  spo2_min: d.spo2Min,
+  hydration_ml: int(d.hydrationMl),
+  hydration_goal_ml: int(d.hydrationGoalMl),
+  sweat_loss_ml: int(d.sweatLossMl),
+  stress_rest_s: int(d.stressRestS),
+  stress_low_s: int(d.stressLowS),
+  stress_medium_s: int(d.stressMediumS),
+  stress_high_s: int(d.stressHighS),
+  stress_activity_s: int(d.stressActivityS),
+  body_battery_end_of_day: int(d.bodyBatteryEndOfDay),
+  body_battery_events: d.bodyBatteryEvents,
+  hrv_baseline_low: d.hrvBaselineLow,
+  hrv_baseline_high: d.hrvBaselineHigh,
+  hrv_5min_high: d.hrv5MinHigh,
+  hrv_feedback: d.hrvFeedback,
   source: d.provenance.source,
   external_id: d.provenance.externalId,
   fetched_at: d.provenance.fetchedAt,
@@ -59,6 +78,25 @@ export const dailyFromRow = (r: Row): DailyMetrics => ({
   hrvWeeklyAvg: r.hrv_weekly_avg as number | null,
   hrvStatus: r.hrv_status as DailyMetrics['hrvStatus'],
   vo2Max: r.vo2_max as number | null,
+  respirationAvg: (r.respiration_avg as number | null) ?? null,
+  respirationMin: (r.respiration_min as number | null) ?? null,
+  respirationMax: (r.respiration_max as number | null) ?? null,
+  spo2Avg: (r.spo2_avg as number | null) ?? null,
+  spo2Min: (r.spo2_min as number | null) ?? null,
+  hydrationMl: (r.hydration_ml as number | null) ?? null,
+  hydrationGoalMl: (r.hydration_goal_ml as number | null) ?? null,
+  sweatLossMl: (r.sweat_loss_ml as number | null) ?? null,
+  stressRestS: (r.stress_rest_s as number | null) ?? null,
+  stressLowS: (r.stress_low_s as number | null) ?? null,
+  stressMediumS: (r.stress_medium_s as number | null) ?? null,
+  stressHighS: (r.stress_high_s as number | null) ?? null,
+  stressActivityS: (r.stress_activity_s as number | null) ?? null,
+  bodyBatteryEndOfDay: (r.body_battery_end_of_day as number | null) ?? null,
+  bodyBatteryEvents: (r.body_battery_events as DailyMetrics['bodyBatteryEvents']) ?? null,
+  hrvBaselineLow: (r.hrv_baseline_low as number | null) ?? null,
+  hrvBaselineHigh: (r.hrv_baseline_high as number | null) ?? null,
+  hrv5MinHigh: (r.hrv_5min_high as number | null) ?? null,
+  hrvFeedback: (r.hrv_feedback as string | null) ?? null,
   provenance: prov(r),
 })
 
@@ -75,6 +113,22 @@ export const sleepToRow = (userId: string, s: SleepSession): Row => ({
   score: int(s.score),
   avg_respiration: s.avgRespiration,
   avg_spo2: s.avgSpo2,
+  nap_s: int(s.napS),
+  awake_count: int(s.awakeCount),
+  avg_sleep_stress: s.avgSleepStress,
+  avg_hr: s.avgHr,
+  spo2_low: s.spo2Low,
+  spo2_high: s.spo2High,
+  spo2_events: int(s.spo2Events),
+  respiration_low: s.respirationLow,
+  respiration_high: s.respirationHigh,
+  breathing_disruption: s.breathingDisruption,
+  score_feedback: s.scoreFeedback,
+  score_insight: s.scoreInsight,
+  score_factors: s.scoreFactors,
+  need: s.need,
+  naps: s.naps,
+  alignment: s.alignment,
   source: s.provenance.source,
   external_id: s.provenance.externalId,
   fetched_at: s.provenance.fetchedAt,
@@ -116,6 +170,7 @@ export const activityToRow = (userId: string, a: Activity): Row => ({
   hr_zone_seconds: a.hrZoneSeconds?.map((z) => Math.round(z)) ?? null,
   start_lat: a.startLat,
   start_lng: a.startLng,
+  extra: a.extra,
   fetched_at: a.provenance.fetchedAt,
 })
 
@@ -144,6 +199,7 @@ export const activityFromRow = (r: Row): Activity => ({
   startLat: r.start_lat as number | null,
   startLng: r.start_lng as number | null,
   notes: null,
+  extra: (r.extra as Activity['extra']) ?? null,
   provenance: prov(r),
 })
 
@@ -153,4 +209,46 @@ export const detailToRow = (userId: string, activityId: string, d: ActivityDetai
   laps: d.laps,
   samples: d.samples,
   fetched_at: new Date().toISOString(),
+})
+
+export const bodyToRow = (userId: string, b: BodyComposition): Row => ({
+  user_id: userId,
+  date: b.date,
+  measured_at: b.measuredAt,
+  weight_kg: b.weightKg,
+  bmi: b.bmi,
+  body_fat_pct: b.bodyFatPct,
+  body_water_pct: b.bodyWaterPct,
+  muscle_mass_kg: b.muscleMassKg,
+  bone_mass_kg: b.boneMassKg,
+  visceral_fat: b.visceralFat,
+  physique_rating: b.physiqueRating,
+  metabolic_age: b.metabolicAge,
+  source: b.provenance.source,
+  external_id: b.provenance.externalId,
+  fetched_at: b.provenance.fetchedAt,
+})
+
+export const fitnessAgeToRow = (userId: string, f: FitnessAge): Row => ({
+  user_id: userId,
+  date: f.date,
+  chronological_age: f.chronologicalAge,
+  fitness_age: f.fitnessAge,
+  achievable_fitness_age: f.achievableFitnessAge,
+  previous_fitness_age: f.previousFitnessAge,
+  components: f.components,
+  source: f.provenance.source,
+  fetched_at: f.provenance.fetchedAt,
+})
+
+export const hrZonesToRow = (userId: string, z: HrZoneConfig): Row => ({
+  user_id: userId,
+  sport: z.sport,
+  training_method: z.trainingMethod,
+  resting_hr: int(z.restingHr),
+  lactate_threshold_hr: int(z.lactateThresholdHr),
+  max_hr: int(z.maxHr),
+  zone_floors: z.zoneFloors.map((f) => Math.round(f)),
+  source: z.provenance.source,
+  fetched_at: z.provenance.fetchedAt,
 })

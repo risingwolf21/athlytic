@@ -3,8 +3,12 @@ import type {
   ActivityDetail,
   ActivityLap,
   ActivitySamples,
+  BodyComposition,
   DailyMetrics,
+  FitnessAge,
+  FitnessAgeComponent,
   HrvStatus,
+  HrZoneConfig,
   IntradaySeries,
   NormalizedBundle,
   Provenance,
@@ -15,8 +19,11 @@ import type {
   GarminActivity,
   GarminActivityDetails,
   GarminDaily,
+  GarminFitnessAge,
+  GarminHrZones,
   GarminRangePayload,
   GarminSplit,
+  GarminWeight,
 } from './types.ts'
 
 const iso = (epochSeconds: number) => new Date(epochSeconds * 1000).toISOString()
@@ -28,6 +35,9 @@ function inRange(value: number | undefined | null, min: number, max: number): nu
 const heartRate = (v: number | undefined) => inRange(v, 25, 250)
 const percent = (v: number | undefined) => inRange(v, 0, 100)
 const nonNegative = (v: number | undefined) => inRange(v, 0, Number.MAX_SAFE_INTEGER)
+const spo2 = (v: number | undefined) => inRange(v, 50, 100)
+const respiration = (v: number | undefined) => inRange(v, 3, 60)
+const orNull = <T>(v: T | undefined): T | null => v ?? null
 
 const SPORT_BY_TYPE: Record<string, Sport> = {
   HIKING: 'hiking',
@@ -98,6 +108,12 @@ export function normalizeGarminRange(payload: GarminRangePayload, fetchedAt: str
     if (battery.length) intraday.push({ date: d.calendarDate, metric: 'body_battery', points: battery, provenance: prov })
     const derived = bodyBatteryRange(battery.map(([, v]) => v))
 
+    const hrvSeries = (payload.intradayExtra ?? []).filter((x) => x.calendarDate === d.calendarDate)
+    for (const series of hrvSeries) {
+      const points = series.points.filter(([, v]) => (series.metric === 'hrv' ? v >= 1 && v <= 300 : v >= 50 && v <= 100))
+      if (points.length) intraday.push({ date: d.calendarDate, metric: series.metric, points, provenance: prov })
+    }
+
     const intensity =
       d.moderateIntensityDurationInSeconds == null && d.vigorousIntensityDurationInSeconds == null
         ? null
@@ -125,6 +141,25 @@ export function normalizeGarminRange(payload: GarminRangePayload, fetchedAt: str
       hrvWeeklyAvg: inRange(hrv?.weeklyAvg, 1, 300),
       hrvStatus: hrv?.status ? (HRV_STATUS[hrv.status] ?? null) : null,
       vo2Max: inRange(metricsByDate.get(d.calendarDate)?.vo2Max, 10, 100),
+      respirationAvg: respiration(d.avgRespirationBreathsPerMinute),
+      respirationMin: respiration(d.minRespirationBreathsPerMinute),
+      respirationMax: respiration(d.maxRespirationBreathsPerMinute),
+      spo2Avg: spo2(d.avgSpo2Percent),
+      spo2Min: spo2(d.minSpo2Percent),
+      hydrationMl: nonNegative(d.hydrationConsumedMl),
+      hydrationGoalMl: nonNegative(d.hydrationGoalMl),
+      sweatLossMl: nonNegative(d.sweatLossMl),
+      stressRestS: nonNegative(d.restStressDurationInSeconds),
+      stressLowS: nonNegative(d.lowStressDurationInSeconds),
+      stressMediumS: nonNegative(d.mediumStressDurationInSeconds),
+      stressHighS: nonNegative(d.highStressDurationInSeconds),
+      stressActivityS: nonNegative(d.activityStressDurationInSeconds),
+      bodyBatteryEndOfDay: percent(d.bodyBatteryEndOfDayValue),
+      bodyBatteryEvents: d.bodyBatteryEvents?.length ? d.bodyBatteryEvents : null,
+      hrvBaselineLow: inRange(hrv?.baselineBalancedLow, 1, 300),
+      hrvBaselineHigh: inRange(hrv?.baselineBalancedUpper, 1, 300),
+      hrv5MinHigh: null,
+      hrvFeedback: orNull(hrv?.feedbackPhrase),
       provenance: prov,
     }
   })
@@ -139,12 +174,97 @@ export function normalizeGarminRange(payload: GarminRangePayload, fetchedAt: str
     remS: nonNegative(s.remSleepInSeconds),
     awakeS: nonNegative(s.awakeDurationInSeconds),
     score: percent(s.overallSleepScore?.value),
-    avgRespiration: inRange(s.avgRespirationBreathsPerMinute, 3, 60),
-    avgSpo2: inRange(s.avgSpo2Percent, 50, 100),
+    avgRespiration: respiration(s.avgRespirationBreathsPerMinute),
+    avgSpo2: spo2(s.avgSpo2Percent),
+    napS: nonNegative(s.napDurationInSeconds),
+    awakeCount: nonNegative(s.awakeCount),
+    avgSleepStress: percent(s.avgSleepStress),
+    avgHr: heartRate(s.avgHeartRateInBeatsPerMinute),
+    spo2Low: spo2(s.lowestSpo2Percent),
+    spo2High: spo2(s.highestSpo2Percent),
+    spo2Events: nonNegative(s.spo2EventsBelowThreshold),
+    respirationLow: respiration(s.lowestRespirationBreathsPerMinute),
+    respirationHigh: respiration(s.highestRespirationBreathsPerMinute),
+    breathingDisruption: orNull(s.breathingDisruptionSeverity),
+    scoreFeedback: orNull(s.scoreFeedback),
+    scoreInsight: orNull(s.scoreInsight),
+    scoreFactors: s.scoreFactors ?? null,
+    need: orNull(s.need),
+    naps: orNull(s.naps),
+    alignment: orNull(s.alignment),
     provenance: provenance(s.summaryId, fetchedAt),
   }))
 
-  return { daily, sleep, intraday, activities: payload.activities.map((a) => normalizeGarminActivity(a, fetchedAt)) }
+  return {
+    daily,
+    sleep,
+    intraday,
+    activities: payload.activities.map((a) => normalizeGarminActivity(a, fetchedAt)),
+    body: (payload.weights ?? []).map((w) => normalizeWeight(w, fetchedAt)),
+    fitnessAge: (payload.fitnessAge ?? []).map((f) => normalizeFitnessAge(f, fetchedAt)),
+    hrZones: (payload.hrZones ?? []).flatMap((z) => normalizeHrZones(z, fetchedAt)),
+  }
+}
+
+function normalizeWeight(w: GarminWeight, fetchedAt: string): BodyComposition {
+  return {
+    date: w.calendarDate,
+    measuredAt: w.measuredAtInSeconds != null ? iso(w.measuredAtInSeconds) : null,
+    weightKg: inRange(w.weightKg, 20, 400),
+    bmi: inRange(w.bmi, 8, 80),
+    bodyFatPct: inRange(w.bodyFatPercent, 1, 80),
+    bodyWaterPct: inRange(w.bodyWaterPercent, 10, 90),
+    muscleMassKg: inRange(w.muscleMassKg, 5, 200),
+    boneMassKg: inRange(w.boneMassKg, 0.5, 20),
+    visceralFat: inRange(w.visceralFat, 0, 60),
+    physiqueRating: inRange(w.physiqueRating, 0, 20),
+    metabolicAge: inRange(w.metabolicAge, 10, 120),
+    provenance: provenance(`weight:${w.calendarDate}`, fetchedAt),
+  }
+}
+
+function normalizeFitnessAge(f: GarminFitnessAge, fetchedAt: string): FitnessAge {
+  const components = f.components
+    ? Object.fromEntries(
+        Object.entries(f.components).map(([key, c]): [string, FitnessAgeComponent] => [
+          key,
+          {
+            value: orNull(c.value),
+            targetValue: orNull(c.targetValue),
+            improvementValue: orNull(c.improvementValue),
+            potentialAge: orNull(c.potentialAge),
+            priority: orNull(c.priority),
+            lastMeasurementDate: orNull(c.lastMeasurementDate),
+          },
+        ]),
+      )
+    : null
+  return {
+    date: f.calendarDate,
+    chronologicalAge: inRange(f.chronologicalAge, 5, 120),
+    fitnessAge: inRange(f.fitnessAge, 5, 120),
+    achievableFitnessAge: inRange(f.achievableFitnessAge, 5, 120),
+    previousFitnessAge: inRange(f.previousFitnessAge, 5, 120),
+    components,
+    provenance: provenance(`fitnessage:${f.calendarDate}`, fetchedAt),
+  }
+}
+
+function normalizeHrZones(z: GarminHrZones, fetchedAt: string): HrZoneConfig[] {
+  const floors = z.zoneFloors.map(heartRate)
+  const ascending = floors.every((f, i) => f != null && (i === 0 || f > (floors[i - 1] as number)))
+  if (!ascending) return []
+  return [
+    {
+      sport: z.sport,
+      trainingMethod: orNull(z.trainingMethod),
+      restingHr: heartRate(z.restingHeartRate),
+      lactateThresholdHr: heartRate(z.lactateThresholdHeartRate),
+      maxHr: heartRate(z.maxHeartRate),
+      zoneFloors: floors as HrZoneConfig['zoneFloors'],
+      provenance: provenance(`hrzones:${z.sport}`, fetchedAt),
+    },
+  ]
 }
 
 export function normalizeGarminActivity(a: GarminActivity, fetchedAt: string): Activity {
@@ -174,6 +294,7 @@ export function normalizeGarminActivity(a: GarminActivity, fetchedAt: string): A
     startLat: inRange(a.startingLatitudeInDegree, -90, 90),
     startLng: inRange(a.startingLongitudeInDegree, -180, 180),
     notes: null,
+    extra: orNull(a.extra),
     provenance: provenance(a.summaryId, fetchedAt),
   }
 }

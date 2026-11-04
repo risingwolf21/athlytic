@@ -6,20 +6,32 @@ import type {
   ApiDailySleep,
   ApiDailySummariesResponse,
   ApiDailySummaryV2,
+  ApiFitnessAge,
+  ApiHeartRateZones,
+  ApiHrvChart,
   ApiHrvDailyResponse,
+  ApiHydrationDay,
+  ApiSpo2Day,
   ApiSummarizedActivity,
   ApiUserSettings,
+  ApiWeightEntry,
 } from './api-types.ts'
 import { decodeActivityFile } from './fit.ts'
 import {
+  applyHydration,
   heartRateOffsets,
   mapActivity,
   mapActivityDetails,
   mapBodyBattery,
   mapDailySummary,
   mapFitDetails,
+  mapFitnessAge,
+  mapHeartRateZones,
   mapHrv,
+  mapHrvReadings,
   mapSleep,
+  mapSpo2Readings,
+  mapWeight,
 } from './map.ts'
 import {
   GarminApiError,
@@ -39,7 +51,7 @@ export interface HttpGarminClientOptions {
 
 /** Longest date window per request: the sleep and Body Battery endpoints allow 31 days, the steps/stress ones 28. */
 const WINDOW_DAYS = 30
-/** Intraday heart rate needs one request per day, so only recent days are fetched. */
+/** Intraday heart rate, HRV and SpO2 need one request per day and metric, so only recent days are fetched. */
 const INTRADAY_HEART_RATE_DAYS = 7
 const ACTIVITY_PAGE_SIZE = 50
 const MAX_ACTIVITY_PAGES = 40
@@ -69,6 +81,8 @@ export function parseTokenResponse(text: string): { token: string; expiresInSeco
   return { token: trimmed.replace(/^"|"$/g, ''), expiresInSeconds: null }
 }
 
+type RawSink = (resourceType: string, externalId: string, calendarDate: string | null, body: unknown) => void
+
 const byDate = (a: { calendarDate: string }, b: { calendarDate: string }) => a.calendarDate.localeCompare(b.calendarDate)
 
 /**
@@ -95,11 +109,12 @@ export class HttpGarminClient implements GarminClient {
   }
 
   async fetchRange(from: string, to: string): Promise<GarminRangePayload> {
-    const payload: GarminRangePayload = { dailies: [], stressDetails: [], sleeps: [], hrv: [], userMetrics: [], activities: [], raw: [] }
+    const payload: GarminRangePayload = { dailies: [], stressDetails: [], sleeps: [], hrv: [], userMetrics: [], activities: [], weights: [], fitnessAge: [], hrZones: [], intradayExtra: [], raw: [] }
     for (let start = from; daysBetween(start, to) >= 0; start = addDays(start, WINDOW_DAYS)) {
       const end = addDays(start, WINDOW_DAYS - 1) > to ? to : addDays(start, WINDOW_DAYS - 1)
       await this.fetchWindow(start, end, payload)
     }
+    await this.addProfileData(to, payload)
     return payload
   }
 
@@ -181,14 +196,80 @@ export class HttpGarminClient implements GarminClient {
     }
     for (const [calendarDate, { vo2Max }] of vo2MaxByDay) payload.userMetrics.push({ summaryId: `vo2max:${calendarDate}`, calendarDate, vo2Max })
 
+    await this.addHydration(start, end, payload, raw)
+    await this.addWeights(start, end, payload, raw)
     await this.addIntradayHeartRate(start, end, payload, raw)
+    await this.addRecentIntraday(start, end, payload, raw)
+  }
+
+  /** Heart rate zone settings and Fitness Age are not tied to a date window; they are refreshed with every slice. */
+  private async addProfileData(to: string, payload: GarminRangePayload): Promise<void> {
+    const raw = (resourceType: string, externalId: string, body: unknown) => payload.raw!.push({ resourceType, externalId, calendarDate: null, payload: body })
+    const zones = await this.soft<ApiHeartRateZones[]>('biometric-service/heartRateZones/v2')
+    for (const z of zones ?? []) {
+      const mapped = mapHeartRateZones(z)
+      if (!mapped) continue
+      raw('hr_zones', `hrzones:${mapped.sport}`, z)
+      payload.hrZones.push(mapped)
+    }
+    const ages = await this.soft<ApiFitnessAge[]>(`fitnessage-service/fitnessage/v2/${to}`, { fullHistoryScan: 'true' })
+    for (const a of ages ?? []) {
+      const mapped = mapFitnessAge(a, to)
+      if (!mapped) continue
+      raw('fitness_age', `fitnessage:${mapped.calendarDate}`, a)
+      payload.fitnessAge.push(mapped)
+    }
+  }
+
+  private async addHydration(start: string, end: string, payload: GarminRangePayload, raw: RawSink): Promise<void> {
+    const days = await this.soft<ApiHydrationDay[]>(`usersummary-service/stats/hydration/daily/${start}/${end}`)
+    const byDate = new Map(payload.dailies.map((d) => [d.calendarDate, d]))
+    for (const h of days ?? []) {
+      const daily = h.calendarDate ? byDate.get(h.calendarDate) : undefined
+      if (!daily || !h.calendarDate) continue
+      raw('hydration', `hydration:${h.calendarDate}`, h.calendarDate, h)
+      applyHydration(daily, h)
+    }
+  }
+
+  private async addWeights(start: string, end: string, payload: GarminRangePayload, raw: RawSink): Promise<void> {
+    const entries = await this.soft<ApiWeightEntry[]>(`weight-service/weight/all/${start}/${end}`)
+    const latestByDate = new Map<string, ReturnType<typeof mapWeight>>()
+    for (const entry of [...(entries ?? [])].sort((a, b) => String(a.timestampGMT ?? '').localeCompare(String(b.timestampGMT ?? '')))) {
+      const mapped = mapWeight(entry)
+      if (!mapped) continue
+      raw('weight', `weight:${mapped.calendarDate}`, mapped.calendarDate, entry)
+      latestByDate.set(mapped.calendarDate, mapped)
+    }
+    for (const w of latestByDate.values()) if (w) payload.weights.push(w)
+  }
+
+  private async addRecentIntraday(start: string, end: string, payload: GarminRangePayload, raw: RawSink): Promise<void> {
+    const oldest = addDays(todayInBerlin(this.now()), -(INTRADAY_HEART_RATE_DAYS - 1))
+    for (const daily of payload.dailies) {
+      if (daily.calendarDate < start || daily.calendarDate > end || daily.calendarDate < oldest) continue
+      const [hrvChart, spo2] = await Promise.all([
+        this.soft<ApiHrvChart>(`hrv-service/hrv/${daily.calendarDate}`),
+        this.soft<ApiSpo2Day>(`wellness-service/wellness/daily/spo2acclimation/${daily.calendarDate}`),
+      ])
+      const hrvSeries = hrvChart ? mapHrvReadings(daily.calendarDate, hrvChart) : null
+      if (hrvSeries) {
+        raw('hrv_readings', `hrvreadings:${daily.calendarDate}`, daily.calendarDate, hrvChart)
+        payload.intradayExtra.push(hrvSeries)
+      }
+      const spo2Series = spo2 ? mapSpo2Readings(daily.calendarDate, spo2) : null
+      if (spo2Series) {
+        raw('spo2', `spo2:${daily.calendarDate}`, daily.calendarDate, spo2)
+        payload.intradayExtra.push(spo2Series)
+      }
+    }
   }
 
   private async addIntradayHeartRate(
     start: string,
     end: string,
     payload: GarminRangePayload,
-    raw: (resourceType: string, externalId: string, calendarDate: string | null, body: unknown) => void,
+    raw: RawSink,
   ): Promise<void> {
     const oldest = addDays(todayInBerlin(this.now()), -(INTRADAY_HEART_RATE_DAYS - 1))
     for (const daily of payload.dailies) {
@@ -253,6 +334,16 @@ export class HttpGarminClient implements GarminClient {
   private async get<T>(path: string, params: Record<string, string> = {}): Promise<T> {
     const text = await (await this.request(path, params, 'application/json')).text()
     return (text ? JSON.parse(text) : null) as T
+  }
+
+  /** Optional endpoints: a failure (unsupported device, missing permission, bad body) must not abort the import. */
+  private async soft<T>(path: string, params: Record<string, string> = {}): Promise<T | undefined> {
+    try {
+      return (await this.get<T>(path, params)) ?? undefined
+    } catch (error) {
+      if (error instanceof GarminApiError && (error.status === 401 || error.status === 429)) throw error
+      return undefined
+    }
   }
 
   private async getBytes(path: string): Promise<Uint8Array> {

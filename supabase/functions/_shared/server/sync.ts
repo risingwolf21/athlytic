@@ -7,7 +7,7 @@ import type { Db } from './context.ts'
 import { sha256Hex } from './crypto.ts'
 import { HttpError } from './http.ts'
 import { providerForConnection } from './provider-factory.ts'
-import { activityFromRow, activityToRow, dailyFromRow, dailyToRow, detailToRow, intradayToRow, sleepToRow, type Row } from './rows.ts'
+import { activityFromRow, activityToRow, bodyToRow, dailyFromRow, dailyToRow, detailToRow, fitnessAgeToRow, hrZonesToRow, intradayToRow, sleepToRow, type Row } from './rows.ts'
 
 /** Days fetched per provider request batch; also the unit of progress for the resumable import. */
 const CHUNK_DAYS = 30
@@ -101,6 +101,16 @@ async function persistIntraday(db: Db, userId: string, bundle: NormalizedBundle)
   for (const part of chunk(rows, 50)) await must(db.from('intraday_samples').upsert(part, { onConflict: 'user_id,date,metric' }))
 }
 
+async function persistProfile(db: Db, userId: string, bundle: NormalizedBundle): Promise<number> {
+  const body = bundle.body.map((b) => bodyToRow(userId, b))
+  for (const part of chunk(body, 200)) await must(db.from('body_composition').upsert(part, { onConflict: 'user_id,date' }))
+  const fitnessAge = bundle.fitnessAge.map((f) => fitnessAgeToRow(userId, f))
+  for (const part of chunk(fitnessAge, 200)) await must(db.from('fitness_age').upsert(part, { onConflict: 'user_id,date' }))
+  const zones = bundle.hrZones.map((z) => hrZonesToRow(userId, z))
+  for (const part of chunk(zones, 20)) await must(db.from('hr_zone_configs').upsert(part, { onConflict: 'user_id,sport' }))
+  return body.length
+}
+
 /** Marks workouts recorded by more than one source as duplicates of the best record. */
 async function resolveDuplicates(db: Db, userId: string, activities: Activity[]): Promise<void> {
   if (!activities.length) return
@@ -133,6 +143,7 @@ interface SliceResult {
   daily: number
   sleep: number
   activities: number
+  body: number
   oldestData: string | null
 }
 
@@ -142,8 +153,9 @@ async function importRange(db: Db, userId: string, connectionId: string, provide
   await storeRaw(db, userId, connectionId, raw)
   const [daily, sleep, activities] = await Promise.all([persistDaily(db, userId, bundle), persistSleep(db, userId, bundle), persistActivities(db, userId, bundle)])
   await persistIntraday(db, userId, bundle)
+  const body = await persistProfile(db, userId, bundle)
   const dates = [...bundle.daily.map((d) => d.date), ...bundle.sleep.map((s) => s.date)].sort()
-  return { days: daysBetween(from, to) + 1, daily, sleep, activities, oldestData: dates[0] ?? null }
+  return { days: daysBetween(from, to) + 1, daily, sleep, activities, body, oldestData: dates[0] ?? null }
 }
 
 async function acquireLock(db: Db, connection: Connection): Promise<void> {
@@ -180,7 +192,7 @@ export async function runSync(db: Db, userId: string, kind: SyncKind): Promise<{
     .insert({ user_id: userId, connection_id: connection.id, kind, status: 'running' })
     .select('id')
     .single()
-  const stats: Record<string, number> = { days: 0, daily: 0, sleep: 0, activities: 0 }
+  const stats: Record<string, number> = { days: 0, daily: 0, sleep: 0, activities: 0, body: 0 }
   const started = Date.now()
   const today = todayInBerlin()
   let done = false

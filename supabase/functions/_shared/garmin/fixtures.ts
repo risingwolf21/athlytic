@@ -1,4 +1,5 @@
 import { berlinMidnightEpoch, berlinOffsetSeconds, eachDay, isoWeekday, todayInBerlin, addDays } from '../dates.ts'
+import type { ActivityExtra } from '../domain.ts'
 import { clamp, createRng, gaussian, hashString, type Rng } from '../prng.ts'
 import type {
   GarminActivity,
@@ -6,11 +7,15 @@ import type {
   GarminActivitySample,
   GarminClient,
   GarminDaily,
+  GarminFitnessAge,
   GarminHrv,
+  GarminHrZones,
+  GarminIntradaySeries,
   GarminRangePayload,
   GarminSleep,
   GarminStressDetails,
   GarminUserMetrics,
+  GarminWeight,
 } from './types.ts'
 
 /**
@@ -47,6 +52,7 @@ interface SimDay {
   lowBattery: number
   bedtimeOffsetS: number
   sleepSeconds: number
+  hrvValue: number
 }
 
 const TRAILHEADS = [
@@ -295,6 +301,64 @@ const NAMES: Record<string, string[]> = {
   ride_easy: ['Lockere Ausfahrt', 'Regenerationsfahrt', 'Pendeln Karlsruhe'],
 }
 
+const round1 = (v: number) => Math.round(v * 10) / 10
+
+/** Extra summary fields a watch would record; generated from a dedicated RNG so existing fixture values stay stable. */
+function fixtureActivityExtra(kind: ActivityKind, s: GarminActivity): ActivityExtra {
+  const rng = createRng(hashString(`extra-${s.summaryId}`))
+  const duration = s.durationInSeconds
+  const distance = s.distanceInMeters ?? 0
+  const extra: ActivityExtra = {
+    elapsedS: Math.round(duration * (1.02 + rng() * 0.06)),
+    avgStress: Math.round(18 + rng() * 14),
+    stressDelta: Math.round(-4 + rng() * 14),
+    bodyBatteryDelta: -Math.round((duration / 3600) * (kind === 'strength' ? 9 : 12) * (0.8 + rng() * 0.4)),
+    avgRespiration: round1(kind === 'strength' ? 21 + rng() * 3 : 28 + rng() * 6),
+    maxRespiration: round1(40 + rng() * 8),
+    minRespiration: round1(14 + rng() * 3),
+    minTempC: round1(8 + rng() * 6),
+    maxTempC: round1(14 + rng() * 10),
+    lapCount: Math.max(1, Math.round(distance / 1000)),
+  }
+  if (kind === 'run') {
+    const paceSplit = distance && s.averageSpeedInMetersPerSecond ? 1000 / s.averageSpeedInMetersPerSecond : 390
+    Object.assign(extra, {
+      groundContactMs: Math.round(228 + rng() * 24),
+      strideLengthCm: Math.round(108 + rng() * 14),
+      verticalOscillationCm: round1(7.8 + rng() * 1.4),
+      verticalRatioPct: round1(6.6 + rng() * 1.2),
+      groundContactBalancePct: round1(49 + rng() * 2),
+      steps: 6500,
+      maxCadence: 188,
+      fastestSplitsS: { 1000: Math.round(paceSplit * 0.93), ...(distance >= 5000 ? { 5000: Math.round(paceSplit * 5 * 0.97) } : {}) },
+    })
+  }
+  if (kind.startsWith('ride')) {
+    const intensity = kind === 'ride_tempo' ? 0.82 : kind === 'ride_long' ? 0.7 : 0.6
+    const ftp = 235
+    const normPower = Math.round(ftp * intensity * (0.97 + rng() * 0.06))
+    const curve: Record<string, number> = {}
+    for (const [seconds, factor] of [[5, 2.9], [60, 1.7], [300, 1.28], [1200, 1.02], [3600, 0.9]] as const) {
+      if (duration >= seconds) curve[String(seconds)] = Math.round(normPower * factor * (0.92 + rng() * 0.08))
+    }
+    const zoneWeights = kind === 'ride_tempo' ? [0.1, 0.25, 0.35, 0.2, 0.07, 0.02, 0.01] : [0.25, 0.4, 0.25, 0.08, 0.02, 0, 0]
+    Object.assign(extra, {
+      normPowerW: normPower,
+      maxPowerW: Math.round(normPower * (2.8 + rng())),
+      max20MinPowerW: curve['1200'],
+      ftpW: ftp,
+      intensityFactor: round1((normPower / ftp) * 100) / 100,
+      tss: Math.round((duration / 3600) * (normPower / ftp) ** 2 * 100),
+      powerCurveW: curve,
+      powerZoneS: zoneWeights.map((w) => Math.round(w * duration)),
+    })
+  }
+  if (kind.startsWith('hike')) {
+    Object.assign(extra, { steps: Math.round(distance / 0.72), floorsClimbed: Math.round((s.totalElevationGainInMeters ?? 0) / 3) })
+  }
+  return extra
+}
+
 function simulateActivity(date: string, kind: ActivityKind, restingHr: number, seq: number): { activity: SimActivity; details: GarminActivityDetails } {
   const activityId = hashString(`${date}-${kind}-${seq}`)
   const rng = createRng(activityId)
@@ -335,6 +399,7 @@ function simulateActivity(date: string, kind: ActivityKind, restingHr: number, s
       timeInHeartRateZonesInSeconds: zones,
       ...(kind === 'run' ? { distanceInMeters: 5400, averageSpeedInMetersPerSecond: 2.57, movingDurationInSeconds: dur } : {}),
     }
+    summary.extra = fixtureActivityExtra(kind, summary)
     const lapsList = [{ startTimeInSeconds: startEpoch }]
     return {
       activity: { summary, kind, startOffsetS, durationS: dur, hrAt: (s) => samples[clamp(Math.floor(s / 10), 0, samples.length - 1)]?.heartRateInBeatsPerMinute ?? restingHr },
@@ -345,6 +410,7 @@ function simulateActivity(date: string, kind: ActivityKind, restingHr: number, s
   const spec = routeSpecFor(kind, rng)
   const sim = simulateTrack(rng, spec, startEpoch, restingHr)
   const summary = summarize(activityId, kind, name, startEpoch, offset, sim)
+  summary.extra = fixtureActivityExtra(kind, summary)
   return {
     activity: { summary, kind, startOffsetS, durationS: summary.durationInSeconds, hrAt: sim.hrBySecond },
     details: { summaryId: summary.summaryId, samples: sim.samples, laps: sim.laps },
@@ -467,6 +533,20 @@ function simulate(through: string): SimState {
         : Math.round(prevLow + (wake - prevLow) * (0.3 + 0.7 * (s / Math.max(wakeT, 1))))
     }
 
+    const extraRng = createRng(hashString(`wellness-${date}`))
+    const stressSpan = Math.round(86_400 * 0.72)
+    const highS = Math.round(stressSpan * clamp((stressAvg - 20) / 120, 0.02, 0.3))
+    const mediumS = Math.round(stressSpan * clamp(0.18 + (stressAvg - 25) / 160, 0.1, 0.4))
+    const lowS = Math.round(stressSpan * 0.3)
+    const hydrationGoal = 2800
+    const hydration = Math.round(clamp(2100 + gaussian(extraRng) * 450 + (acts.length ? 350 : 0), 600, 4200) / 50) * 50
+    const batteryEvents = acts.map((a) => ({
+      type: 'activity',
+      startTime: new Date((midnight + a.startOffsetS) * 1000).toISOString(),
+      durationS: a.durationS,
+      impact: -Math.round((a.durationS / 3600) * 11 + extraRng() * 3),
+    }))
+
     const daily: GarminDaily = {
       summaryId: `fx-daily-${date}`,
       calendarDate: date,
@@ -490,9 +570,25 @@ function simulate(through: string): SimState {
       bodyBatteryDrainedValue: drained,
       bodyBatteryHighestValue: wake,
       bodyBatteryLowestValue: low,
+      bodyBatteryEndOfDayValue: Math.max(5, low + Math.round(extraRng() * 6)),
+      bodyBatteryEvents: [...batteryEvents, { type: 'sleep', startTime: new Date((midnight + bedtimeOffsetS) * 1000).toISOString(), durationS: asleepS, impact: Math.max(10, wake - prevLow) }],
+      avgRespirationBreathsPerMinute: round1(15.5 + extraRng() * 1.6 + illFactor * 2),
+      minRespirationBreathsPerMinute: round1(11 + extraRng() * 1.5),
+      maxRespirationBreathsPerMinute: round1(24 + extraRng() * 6),
+      avgSpo2Percent: Math.round(96 + gaussian(extraRng) * 0.7 - illFactor * 1.5),
+      minSpo2Percent: Math.round(91 + gaussian(extraRng) * 1.2 - illFactor * 2),
+      hydrationConsumedMl: hydration,
+      hydrationGoalMl: hydrationGoal,
+      sweatLossMl: acts.length ? Math.round(actKcal * 1.1) : 0,
+      restStressDurationInSeconds: Math.round(86_400 * 0.28),
+      lowStressDurationInSeconds: lowS,
+      mediumStressDurationInSeconds: mediumS,
+      highStressDurationInSeconds: highS,
+      activityStressDurationInSeconds: Math.round(acts.reduce((t, a) => t + a.durationS, 0)),
       timeOffsetHeartRateSamples: heartSamples,
     }
 
+    const hasNap = dow === 6 && extraRng() < 0.5
     const sleep: GarminSleep | null = sleepMissing
       ? null
       : {
@@ -508,6 +604,30 @@ function simulate(through: string): SimState {
           overallSleepScore: { value: sleepScore, qualifierKey: sleepScore >= 80 ? 'GOOD' : sleepScore >= 60 ? 'FAIR' : 'POOR' },
           avgRespirationBreathsPerMinute: Math.round((14.2 + gaussian(rng) * 0.6 + illFactor * 1.5) * 10) / 10,
           avgSpo2Percent: Math.round(95.5 + gaussian(rng) * 0.8 - illFactor * 1.5),
+          napDurationInSeconds: hasNap ? 1500 : 0,
+          awakeCount: Math.round(clamp(1 + (awake / asleepS) * 30 + extraRng() * 2, 0, 9)),
+          avgSleepStress: round1(clamp(15 + stressAvg * 0.25 + gaussian(extraRng) * 3, 6, 50)),
+          avgHeartRateInBeatsPerMinute: restingHr + 3,
+          lowestSpo2Percent: Math.round(90 + gaussian(extraRng) * 1.2 - illFactor * 2),
+          highestSpo2Percent: 99,
+          spo2EventsBelowThreshold: Math.round(Math.max(0, gaussian(extraRng) * 2 + illFactor * 6)),
+          lowestRespirationBreathsPerMinute: round1(11 + extraRng() * 1.5),
+          highestRespirationBreathsPerMinute: round1(19 + extraRng() * 3),
+          breathingDisruptionSeverity: illFactor > 0.5 ? 'MODERATE' : 'NONE',
+          scoreFeedback: sleepScore >= 80 ? 'POSITIVE_LONG_AND_DEEP' : sleepScore >= 60 ? 'POSITIVE_LONG_BUT_NOT_ENOUGH_REM' : 'NEGATIVE_NOT_ENOUGH_TOTAL',
+          scoreInsight: prevLoad > 120 ? 'POSITIVE_EXERCISE' : 'NONE',
+          scoreFactors: {
+            totalDuration: { value: Math.round(clamp(((sleepH - 4.5) / 4) * 100, 20, 100)), qualifier: sleepH >= 7 ? 'EXCELLENT' : sleepH >= 6 ? 'GOOD' : 'FAIR', optimalStart: 7, optimalEnd: 9 },
+            stress: { value: Math.round(clamp(100 - stressAvg, 40, 100)), qualifier: stressAvg < 30 ? 'EXCELLENT' : 'GOOD', optimalStart: 0, optimalEnd: 15 },
+            awakeCount: { value: Math.round(clamp(100 - (awake / asleepS) * 600, 30, 100)), qualifier: awake / asleepS < 0.05 ? 'EXCELLENT' : 'FAIR', optimalStart: 0, optimalEnd: 5 },
+            remPercentage: { value: Math.round(clamp((rem / asleepS) * 400, 30, 100)), qualifier: rem / asleepS > 0.2 ? 'GOOD' : 'FAIR', optimalStart: 21, optimalEnd: 31 },
+            restlessness: { value: Math.round(clamp(75 + gaussian(extraRng) * 10, 30, 100)), qualifier: 'GOOD', optimalStart: 0, optimalEnd: 5 },
+            lightPercentage: { value: Math.round(clamp(100 - Math.abs(light / asleepS - 0.5) * 200, 30, 100)), qualifier: 'EXCELLENT', optimalStart: 30, optimalEnd: 64 },
+            deepPercentage: { value: Math.round(clamp((deep / asleepS) * 450, 30, 100)), qualifier: deep / asleepS > 0.16 ? 'EXCELLENT' : 'FAIR', optimalStart: 16, optimalEnd: 33 },
+          },
+          need: { baselineMin: 480, actualMin: Math.round(480 + clamp(prevLoad * 0.15, 0, 40) + illFactor * 30), feedback: prevLoad > 120 ? 'INCREASED_BY_TRAINING' : 'NO_CHANGE', bedtimeStartMin: -90, bedtimeEndMin: -30, nextActualMin: 485 },
+          alignment: { status: Math.abs(bedtimeH - 23.2) < 0.6 ? 'ALIGNED' : 'LATE', windowStartMin: -90, windowEndMin: 0, lastMidpointMin: Math.round((bedtimeH - 24 + sleepH / 2) * 60), windowMidpointMin: 195 },
+          ...(hasNap ? { naps: [{ startTime: new Date((midnight + 14 * 3600) * 1000).toISOString(), endTime: new Date((midnight + 14 * 3600 + 1500) * 1000).toISOString(), durationS: 1500, feedback: 'IDEAL_TIME_IDEAL_DURATION' }] } : {}),
         }
 
     let hrv: GarminHrv | null = null
@@ -525,6 +645,9 @@ function simulate(through: string): SimState {
         lastNight5MinHigh: Math.round(hrvValue * (1.2 + rng() * 0.15)),
         weeklyAvg: Math.round(weekAvg),
         status: ratio >= 0.9 ? 'BALANCED' : ratio >= 0.8 ? 'UNBALANCED' : ratio >= 0.7 ? 'LOW' : 'POOR',
+        baselineBalancedLow: Math.round(monthAvg * 0.88),
+        baselineBalancedUpper: Math.round(monthAvg * 1.12),
+        feedbackPhrase: ratio >= 0.9 ? 'HRV_BALANCED_2' : ratio >= 0.8 ? 'HRV_UNBALANCED_2' : 'HRV_LOW_2',
       }
     }
 
@@ -548,6 +671,7 @@ function simulate(through: string): SimState {
       lowBattery: low,
       bedtimeOffsetS,
       sleepSeconds: asleepS,
+      hrvValue,
     })
     if (missing) {
       const d = days.get(date)!
@@ -557,6 +681,65 @@ function simulate(through: string): SimState {
   }
   cache = { days, last: through }
   return cache
+}
+
+const FIXTURE_HR_ZONES: GarminHrZones[] = [
+  { sport: 'DEFAULT', trainingMethod: 'HR_RESERVE', restingHeartRate: 52, lactateThresholdHeartRate: 168, maxHeartRate: SIM_MAX_HR, zoneFloors: [114, 133, 152, 162, 171] },
+  { sport: 'CYCLING', trainingMethod: 'HR_RESERVE', restingHeartRate: 52, lactateThresholdHeartRate: 164, maxHeartRate: 184, zoneFloors: [110, 128, 146, 156, 166] },
+]
+
+/** Weigh-ins on four of seven days with a slow downward trend. */
+function fixtureWeight(date: string): GarminWeight | null {
+  const rng = createRng(hashString(`weight-${date}`))
+  if (isoWeekday(date) % 2 === 1 || rng() < 0.15) return null
+  const days = Math.max(0, (new Date(date).getTime() - new Date(SIM_EPOCH).getTime()) / 86_400_000)
+  const weightKg = round1(81.5 - days * 0.012 + gaussian(rng) * 0.35)
+  return {
+    calendarDate: date,
+    measuredAtInSeconds: berlinMidnightEpoch(date) + 7 * 3600 + 20 * 60,
+    weightKg,
+    bmi: round1(weightKg / 1.82 ** 2),
+    bodyFatPercent: round1(19.5 - days * 0.004 + gaussian(rng) * 0.3),
+    bodyWaterPercent: round1(56 + gaussian(rng) * 0.5),
+    muscleMassKg: round1(36.5 + gaussian(rng) * 0.2),
+    boneMassKg: round1(3.4 + gaussian(rng) * 0.03),
+    visceralFat: 6,
+    metabolicAge: 34,
+  }
+}
+
+function fixtureFitnessAge(date: string): GarminFitnessAge {
+  const days = Math.max(0, (new Date(date).getTime() - new Date(SIM_EPOCH).getTime()) / 86_400_000)
+  const age = round1(36 - days * 0.006)
+  return {
+    calendarDate: date,
+    chronologicalAge: 39,
+    fitnessAge: age,
+    achievableFitnessAge: 31,
+    previousFitnessAge: round1(age + 0.4),
+    components: {
+      vo2Max: { value: 48, targetValue: 52, improvementValue: 4, potentialAge: 33, priority: 1 },
+      bmi: { value: 24.6, targetValue: 23.5, improvementValue: 1.1, potentialAge: 35, priority: 2 },
+      rhr: { value: 52, targetValue: 48, improvementValue: 4, potentialAge: 35, priority: 3 },
+      vigorousDaysAvg: { value: 2.1, targetValue: 3, improvementValue: 0.9, potentialAge: 34, priority: 4 },
+    },
+  }
+}
+
+/** Overnight HRV readings every five minutes and SpO2 readings every few minutes. */
+function fixtureIntraday(date: string, day: SimDay): GarminIntradaySeries[] {
+  const rng = createRng(hashString(`intraday-${date}`))
+  const start = berlinMidnightEpoch(date) + day.bedtimeOffsetS
+  const hrv: [number, number][] = []
+  const spo2: [number, number][] = []
+  for (let t = 0; t < day.sleepSeconds; t += 300) {
+    hrv.push([start + t, Math.round(clamp(day.hrvValue + Math.sin(t / 2400) * 9 + gaussian(rng) * 5, 15, 160))])
+  }
+  for (let t = 0; t < day.sleepSeconds; t += 240) spo2.push([start + t, Math.round(clamp(95.5 + gaussian(rng) * 1.1, 88, 100))])
+  return [
+    { calendarDate: date, metric: 'hrv', points: hrv },
+    { calendarDate: date, metric: 'spo2', points: spo2 },
+  ]
 }
 
 export class FixtureGarminClient implements GarminClient {
@@ -574,7 +757,7 @@ export class FixtureGarminClient implements GarminClient {
     const today = todayInBerlin(this.now())
     const end = to > today ? today : to
     const start = from < SIM_EPOCH ? SIM_EPOCH : from
-    const payload: GarminRangePayload = { dailies: [], stressDetails: [], sleeps: [], hrv: [], userMetrics: [], activities: [] }
+    const payload: GarminRangePayload = { dailies: [], stressDetails: [], sleeps: [], hrv: [], userMetrics: [], activities: [], weights: [], fitnessAge: [], hrZones: [], intradayExtra: [] }
     if (start > end) return Promise.resolve(payload)
     const sim = simulate(end)
     const intradayFrom = addDays(today, -13)
@@ -588,7 +771,12 @@ export class FixtureGarminClient implements GarminClient {
       if (day.hrv) payload.hrv.push(day.hrv)
       payload.userMetrics.push(day.metrics)
       for (const a of day.activities) payload.activities.push(a.summary)
+      const weight = fixtureWeight(date)
+      if (weight) payload.weights.push(weight)
+      if (isoWeekday(date) === 0) payload.fitnessAge.push(fixtureFitnessAge(date))
+      if (recent && day.sleep && !WATCH_OFF_DAYS.has(date)) payload.intradayExtra.push(...fixtureIntraday(date, day))
     }
+    payload.hrZones.push(...FIXTURE_HR_ZONES)
     return Promise.resolve(payload)
   }
 
