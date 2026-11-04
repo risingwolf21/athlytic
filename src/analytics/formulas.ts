@@ -12,6 +12,7 @@ export type FormulaId =
   | 'personalRecord'
   | 'sleepDebt'
   | 'intensityDistribution'
+  | 'illnessPattern'
 
 export interface FormulaDoc {
   id: FormulaId
@@ -83,5 +84,11 @@ export const FORMULAS: Record<FormulaId, FormulaDoc> = {
     kind: 'calculated',
     formula: 'easy = time in HR zones 1–2;  moderate = zone 3;  hard = zones 4–5;  shares over the last 28 days from activities with zone data (≥ 3 activities, ≥ 2 h)',
     inputs: ['trainingLoad', 'durationMin'],
+  },
+  illnessPattern: {
+    id: 'illnessPattern',
+    kind: 'calculated',
+    formula: 'zₛ = ±(x − median₂₈) / σ₂₈ for resting HR (+), HRV (−), respiration (+), SpO₂ (−);  day flagged if ≥ 2 signals have zₛ ≥ 1.5 and one has zₛ ≥ 2;  pattern if flagged on ≥ 2 consecutive days',
+    inputs: ['restingHr', 'hrv', 'respirationAvg', 'spo2Avg', 'trainingLoad', 'sleepDebtMin', 'avgStress'],
   },
 }

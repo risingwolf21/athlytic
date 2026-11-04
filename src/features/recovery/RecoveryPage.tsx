@@ -21,6 +21,7 @@ import { EmptyState, ErrorState, PageHeader, PageSkeleton, Panel, Section } from
 import { Segmented } from '@/components/Segmented'
 import { trendPoints, windowEndingAt } from '@/features/analytics/series'
 import { BatteryEvents, HrvStatusCard, StressBreakdown } from '@/features/recovery/DayDetail'
+import { IllnessPanel } from '@/features/recovery/IllnessPanel'
 import { SleepDetail } from '@/features/recovery/SleepDetail'
 import { useFitnessData } from '@/hooks/use-fitness-data'
 import { formatClock, formatDay, formatHours, formatMetricValue, formatNumber, formatDuration } from '@/lib/format'
@@ -129,6 +130,8 @@ export default function RecoveryPage() {
           <Link to="/insights/methods" className="text-sm font-medium text-primary">{t('common.howCalculated')}</Link>
         </Panel>
       </Section>
+
+      <IllnessPanel records={records} />
 
       <Section title={t('recovery.lastNight')} action={<KindBadge kind="measured" />}>
         <Panel className="space-y-4">

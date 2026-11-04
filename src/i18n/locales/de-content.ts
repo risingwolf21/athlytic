@@ -105,6 +105,12 @@ export const insightMessages = {
       'In {{nights}} der letzten 7 Nächte lag dein Schlaf im Schnitt {{minutes}} Minuten unter dem von der Uhr geschätzten Bedarf. Mehr Schlaf oder frühere Schlafenszeiten können das ausgleichen.',
     ),
   },
+  health: {
+    illnessPattern: msg(
+      'Ungewöhnliches Körpermuster',
+      'Seit {{streak}} Tagen weichen {{count}} Werte gleichzeitig in die Richtung ab, die häufig bei einer beginnenden Infektion zu beobachten ist: {{signalsText}}. {{confoundersText}}',
+    ),
+  },
   intensity: {
     balanced: msg(
       'Ausgewogene Intensitätsverteilung',
@@ -182,6 +188,11 @@ export const methods = {
     'Schlafdefizit',
     'Pro Nacht: geschätzter Schlafbedarf der Uhr minus tatsächlich geschlafene Zeit, nie unter null. Gemeldet wird ein Defizit, wenn der Durchschnitt der letzten 7 Nächte mindestens 45 Minuten beträgt.',
     'Der Bedarf ist eine Schätzung der Uhr und berücksichtigt Training, HRV und Nickerchen. Er ist kein medizinischer Richtwert.',
+  ),
+  illnessPattern: method(
+    'Frühwarnmuster',
+    'Für Ruhepuls, HRV, Atemfrequenz und SpO₂ wird die Abweichung vom eigenen Normalbereich berechnet (z-Wert, nur in die bei Infekten typische Richtung: Ruhepuls und Atemfrequenz höher, HRV und SpO₂ niedriger). Ein Tag zählt, wenn mindestens zwei Werte z ≥ 1,5 erreichen und einer davon z ≥ 2. Das Muster wird erst gemeldet, wenn es an mindestens zwei Tagen in Folge auftritt.',
+    'Heuristik nach Studien mit Wearables, keine Diagnose. In Alltagsstudien waren die meisten Warnungen keine Infektionen: Training, Alkohol, Schlafmangel, Stress, Reisen und Höhe verändern dieselben Werte.',
   ),
   intensityDistribution: method(
     'Intensitätsverteilung',

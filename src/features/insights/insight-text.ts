@@ -68,6 +68,12 @@ export function useInsightText() {
       case 'recovery':
         base.weakestText = p.weakest ? t(`insights.recoveryComponents.${String(p.weakest)}` as never) : ''
         break
+      case 'health': {
+        base.signalsText = String(p.signals).split(',').filter(Boolean).map((m) => metricLabel(m as MetricKey)).join(', ')
+        const confounders = String(p.confounders).split(',').filter(Boolean)
+        base.confoundersText = confounders.length ? t('insights.confounderNote', { list: confounders.map((c) => t(`illness.confounders.${c}` as never)).join(', ') }) : ''
+        break
+      }
       case 'record': {
         const kind = insight.messageKey.replace('record.', '') as PersonalRecord['kind']
         base.value = formatRecordValue(kind, Number(p.value))
@@ -81,6 +87,7 @@ export function useInsightText() {
 
     const result: InsightText = { title: text('title'), body: text('body') }
     if (insight.kind === 'correlation') result.caution = t('insights.correlationCaution')
+    if (insight.kind === 'health') result.caution = t('illness.disclaimer')
     return result
   }
 }

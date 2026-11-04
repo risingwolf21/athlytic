@@ -9,7 +9,7 @@ import { useFitnessData } from '@/hooks/use-fitness-data'
 import { cn } from '@/lib/utils'
 
 type Filter = InsightKind | 'all'
-const KINDS: InsightKind[] = ['deviation', 'trend', 'correlation', 'load', 'recovery', 'sleep', 'record']
+const KINDS: InsightKind[] = ['deviation', 'trend', 'correlation', 'load', 'recovery', 'sleep', 'health', 'record']
 
 export default function InsightsPage() {
   const { t } = useTranslation()

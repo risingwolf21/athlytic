@@ -2,6 +2,7 @@ import { addDays } from '@shared/dates.ts'
 import type { Activity } from '@shared/domain.ts'
 import { DEFAULT_BASELINE, computeBaseline, deviationFromBaseline, type BaselineOptions } from './baseline.ts'
 import { lagCorrelation, isNoteworthy } from './correlation.ts'
+import { assessIllnessPattern } from './illness.ts'
 import { latestDataDate, recordOn, seriesOf, type DailyRecord } from './daily.ts'
 import type { FormulaId } from './formulas.ts'
 import { acuteChronicRatio, localDate } from './load.ts'
@@ -11,7 +12,7 @@ import { sliceSeries } from './aggregate.ts'
 import { classifyTrend, compareWindows } from './trend.ts'
 import type { DataPoint, DateString } from './types.ts'
 
-export type InsightKind = 'deviation' | 'trend' | 'correlation' | 'record' | 'load' | 'recovery' | 'sleep'
+export type InsightKind = 'deviation' | 'trend' | 'correlation' | 'record' | 'load' | 'recovery' | 'sleep' | 'health'
 export type InsightTone = 'positive' | 'attention' | 'neutral'
 export type Confidence = 'low' | 'medium' | 'high'
 
@@ -294,6 +295,27 @@ export function generateInsights(
       date: rec.date,
       evidence: [],
       ...(rec.activityId ? { activityId: rec.activityId } : {}),
+    })
+  }
+
+  // 9) Multi-signal early-warning pattern (heuristic, never a diagnosis)
+  const illness = assessIllnessPattern(records)
+  if (illness.state === 'pattern' && illness.day && illness.date) {
+    const flagged = illness.day.signals.filter((s) => s.flagged)
+    const from = addDays(illness.date, -27)
+    const date = illness.date
+    insights.push({
+      id: `health:illness:${date}`,
+      kind: 'health',
+      tone: 'attention',
+      priority: 88,
+      messageKey: 'health.illnessPattern',
+      params: { streak: illness.streak, count: flagged.length, signals: flagged.map((s) => s.metric).join(','), confounders: illness.confounders.join(',') },
+      metric: flagged[0]?.metric ?? null,
+      formula: 'illnessPattern',
+      confidence: flagged.length >= 3 && illness.confounders.length === 0 ? 'medium' : 'low',
+      date,
+      evidence: flagged.map((s) => ({ metric: s.metric, role: 'value' as const, from, to: date, points: points(records, s.metric, from, date) })),
     })
   }
 

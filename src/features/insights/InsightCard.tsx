@@ -1,7 +1,7 @@
 import { Link } from 'react-router'
 import { motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import { AlertCircle, ChevronRight, Link2, Sparkles, Trophy, TrendingDown, TrendingUp, Zap, HeartPulse, Bed, type LucideIcon } from 'lucide-react'
+import { AlertCircle, ChevronRight, Link2, Sparkles, Trophy, TrendingDown, TrendingUp, Zap, HeartPulse, Bed, Thermometer, type LucideIcon } from 'lucide-react'
 import type { Insight, InsightKind } from '@/analytics'
 import { useInsightText } from '@/features/insights/insight-text'
 import { cn } from '@/lib/utils'
@@ -14,6 +14,7 @@ const KIND_ICON: Record<InsightKind, LucideIcon> = {
   load: Zap,
   recovery: HeartPulse,
   sleep: Bed,
+  health: Thermometer,
 }
 
 const TONE_CLASS = {

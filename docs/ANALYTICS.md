@@ -32,7 +32,19 @@ series, so it is independently testable (tests are deferred for now, but nothing
 | `lagCorrelation` | calculated | Spearman ρ between `x[d]` and `y[d+lag]` over complete day pairs (≥ 21); p-value via Fisher `z = atanh(ρ)·√(n−3)`; reported if `|ρ| ≥ 0.3` and `p ≤ 0.01`. |
 | `sleepDebt` | calculated | `debtₙ = max(0, need − sleep)` per night, `need` = Garmin's adjusted sleep need (else the baseline). Insight if ≥ 4 of the last 7 nights have debt and the mean is ≥ 45 min. |
 | `intensityDistribution` | calculated | Share of time in HR zones 1–2 (easy), 3 (moderate) and 4–5 (hard) over the last 28 days; needs ≥ 3 activities with zone data and ≥ 2 h. |
+| `illnessPattern` | calculated | `zₛ = ±(x − median₂₈)/σ₂₈` for resting HR (+), HRV (−), respiration (+), SpO₂ (−). Day flagged if ≥ 2 signals have `zₛ ≥ 1.5` and one has `zₛ ≥ 2`. Pattern (and insight) if flagged on ≥ 2 consecutive days. See below. |
 | `personalRecord` | measured | Best single-activity or single-day value over all imported data (duplicates excluded). |
+
+## Illness early-warning pattern
+
+Heuristic, not a diagnosis. Evidence summary (also shown in the app on the Recovery page):
+
+- Lab challenge studies (JAMA Netw Open 2021; J Infect Dis 2023): 88–94 % of infected participants detected from resting HR, HRV and activity, ~1 day before symptoms; small groups (18–31).
+- COVID-19 review (Lancet Digit Health 2022): AUC 0.52–0.92, 20–88 % of cases flagged presymptomatically; heart rate was the most frequent signal, then skin temperature and respiration.
+- Personal-baseline deviations and a ≥ 2-day persistence rule reduce false alarms (Fitbit-based study, 2026).
+- Real world (JMIR Form Res 2024, 470 health-care workers): ~2 % false alarms per day but only 4–10 % of alerts were infections; hard training, poor sleep, stress and alcohol move the same signals.
+
+Design consequences: personal baselines instead of fixed limits; several signals at once; persistence over days; alerts list other plausible explanations (high acute/chronic load, sleep debt, high stress); wording never claims illness. Susceptibility to infections cannot be predicted from this data; past "episodes" are not validated because the app has no illness labels. Skin temperature is not imported yet and would be a useful extra signal.
 
 ## Files
 
@@ -49,6 +61,7 @@ series, so it is independently testable (tests are deferred for now, but nothing
 | `correlation.ts` | Lagged correlations. |
 | `records.ts` | Personal records. |
 | `insights.ts` | Insight generation from the above, with evidence and confidence. |
+| `illness.ts` | Multi-signal early-warning pattern and past episodes. |
 | `formulas.ts` | Formula documentation for the UI. |
 
 ## Adding a metric or insight
