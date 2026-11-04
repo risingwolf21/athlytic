@@ -16,6 +16,7 @@ import type {
   GarminActivityDetails,
   GarminDaily,
   GarminRangePayload,
+  GarminSplit,
 } from './types.ts'
 
 const iso = (epochSeconds: number) => new Date(epochSeconds * 1000).toISOString()
@@ -38,6 +39,12 @@ const SPORT_BY_TYPE: Record<string, Sport> = {
   E_BIKING: 'cycling',
   RUNNING: 'running',
   TRAIL_RUNNING: 'running',
+  VIRTUAL_RIDE: 'cycling',
+  E_BIKE_FITNESS: 'cycling',
+  E_BIKE_MOUNTAIN: 'cycling',
+  INDOOR_WALKING: 'walking',
+  CASUAL_WALKING: 'walking',
+  SPEED_WALKING: 'walking',
   TREADMILL_RUNNING: 'running',
   WALKING: 'walking',
   LAP_SWIMMING: 'swimming',
@@ -171,6 +178,19 @@ export function normalizeGarminActivity(a: GarminActivity, fetchedAt: string): A
   }
 }
 
+function lapsFromSplits(splits: GarminSplit[], startEpoch: number): ActivityLap[] {
+  return splits.map((s, index) => ({
+    index,
+    startOffsetS: s.startTimeInSeconds - startEpoch,
+    durationS: s.durationInSeconds,
+    distanceM: nonNegative(s.distanceInMeters),
+    avgSpeedMs: nonNegative(s.averageSpeedInMetersPerSecond),
+    avgHr: heartRate(s.averageHeartRateInBeatsPerMinute),
+    avgCadence: nonNegative(s.averageCadence),
+    elevationGainM: nonNegative(s.elevationGainInMeters),
+  }))
+}
+
 export function normalizeGarminActivityDetails(activity: Activity, details: GarminActivityDetails): ActivityDetail {
   const startEpoch = Math.floor(new Date(activity.startTime).getTime() / 1000)
   const samples: ActivitySamples = { t: [], lat: [], lng: [], elevation: [], hr: [], speed: [], cadence: [], distance: [] }
@@ -183,6 +203,10 @@ export function normalizeGarminActivityDetails(activity: Activity, details: Garm
     samples.speed.push(s.speedMetersPerSecond ?? null)
     samples.cadence.push(s.bikeCadenceInRPM ?? s.stepsPerMinute ?? null)
     samples.distance.push(s.totalDistanceInMeters ?? null)
+  }
+
+  if (!details.samples.length && details.splits?.length) {
+    return { activity, laps: lapsFromSplits(details.splits, startEpoch), samples }
   }
 
   const starts = details.laps.map((l) => l.startTimeInSeconds - startEpoch)

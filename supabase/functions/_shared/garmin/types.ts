@@ -1,9 +1,8 @@
 /**
- * Raw payload shapes of the Garmin Connect API, modelled on the documented Health/Activity API
- * field names. Only fields Athlytic uses are listed. These types never leave the Garmin adapter.
- *
- * NOTE: Field names follow the public Health API documentation. They have NOT yet been verified
- * against a live Personal API response (no API key available yet) — see docs/GARMIN.md.
+ * Intermediate payload shapes shared by the Garmin client implementations. `HttpGarminClient` maps the
+ * Personal API responses (see api-types.ts / map.ts) into these; `FixtureGarminClient` generates them
+ * directly. `normalize.ts` turns them into the provider-independent domain model.
+ * These types never leave the Garmin adapter.
  */
 
 export interface GarminDaily {
@@ -112,10 +111,31 @@ export interface GarminActivitySample {
   totalDistanceInMeters?: number
 }
 
+/** Lap/split aggregate reported by the provider when no per-sample data is available. */
+export interface GarminSplit {
+  startTimeInSeconds: number
+  durationInSeconds: number
+  distanceInMeters?: number
+  averageSpeedInMetersPerSecond?: number
+  averageHeartRateInBeatsPerMinute?: number
+  averageCadence?: number
+  elevationGainInMeters?: number
+}
+
 export interface GarminActivityDetails {
   summaryId: string
   samples: GarminActivitySample[]
   laps: { startTimeInSeconds: number }[]
+  /** Provider-reported lap aggregates; used when `samples` is empty. */
+  splits?: GarminSplit[]
+}
+
+/** Untouched provider response item, stored so normalization can be re-run later. */
+export interface GarminRawRecord {
+  resourceType: string
+  externalId: string
+  calendarDate: string | null
+  payload: unknown
 }
 
 export interface GarminRangePayload {
@@ -125,6 +145,8 @@ export interface GarminRangePayload {
   hrv: GarminHrv[]
   userMetrics: GarminUserMetrics[]
   activities: GarminActivity[]
+  /** Original provider responses; when absent the mapped items above are stored as raw records. */
+  raw?: GarminRawRecord[]
 }
 
 export interface GarminClient {

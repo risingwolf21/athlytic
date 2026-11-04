@@ -1,7 +1,21 @@
 import type { Activity, ActivityDetail, NormalizedBundle } from '../domain.ts'
 import type { DataProvider, RawRecord } from '../provider.ts'
 import { normalizeGarminActivityDetails, normalizeGarminRange } from './normalize.ts'
-import type { GarminClient } from './types.ts'
+import type { GarminClient, GarminRangePayload } from './types.ts'
+
+const MAPPED_RESOURCES = ['dailies', 'stressDetails', 'sleeps', 'hrv', 'userMetrics', 'activities'] as const
+
+/** Fallback for clients that do not keep the original responses (e.g. the fixture client). */
+function rawFromMapped(payload: GarminRangePayload): RawRecord[] {
+  return MAPPED_RESOURCES.flatMap((resourceType) =>
+    (payload[resourceType] as { summaryId: string; calendarDate?: string }[]).map((item) => ({
+      resourceType,
+      externalId: item.summaryId,
+      calendarDate: item.calendarDate ?? null,
+      payload: item,
+    })),
+  )
+}
 
 export class GarminProvider implements DataProvider {
   readonly id = 'garmin' as const
@@ -21,15 +35,7 @@ export class GarminProvider implements DataProvider {
 
   async fetchRange(from: string, to: string, onRaw?: (records: RawRecord[]) => void): Promise<NormalizedBundle> {
     const payload = await this.client.fetchRange(from, to)
-    if (onRaw) {
-      const records: RawRecord[] = []
-      for (const [resourceType, items] of Object.entries(payload)) {
-        for (const item of items as { summaryId: string; calendarDate?: string; startTimeInSeconds?: number }[]) {
-          records.push({ resourceType, externalId: item.summaryId, calendarDate: item.calendarDate ?? null, payload: item })
-        }
-      }
-      onRaw(records)
-    }
+    if (onRaw) onRaw(payload.raw ?? rawFromMapped(payload))
     return normalizeGarminRange(payload, this.now().toISOString())
   }
 
