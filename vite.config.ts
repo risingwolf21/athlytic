@@ -60,6 +60,19 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rolldownOptions: {
+      output: {
+        advancedChunks: {
+          groups: [
+            { name: 'charts', test: /node_modules[\\/](recharts|d3-|victory-vendor)/ },
+            { name: 'motion', test: /node_modules[\\/](motion|framer-motion|motion-dom|motion-utils)/ },
+            { name: 'supabase', test: /node_modules[\\/]@supabase/ },
+          ],
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, 'src'),

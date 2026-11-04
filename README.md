@@ -1,32 +1,65 @@
-# React + TypeScript + Vite
+# Athlytic
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A premium, mobile-first fitness intelligence PWA: an analytical companion to Garmin Connect with baselines,
+recovery, training load, correlations and transparent insights. German UI, metric units, light/dark themes.
 
-Currently, two official plugins are available:
+React 19 · Vite · TypeScript (strict) · Tailwind v4 · shadcn/ui · Recharts · Motion · TanStack Query · Zustand ·
+Supabase · Zod · vite-plugin-pwa (Workbox) · Leaflet/OSM.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Quick start (demo mode, no backend)
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev        # http://localhost:5173
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Without Supabase environment variables the app runs in **demo mode** with simulated Garmin data (fixtures), so
+every screen is explorable. This is also what the GitHub Pages build serves.
+
+## Local backend (Supabase)
+
+Requires Docker and the [Supabase CLI](https://supabase.com/docs/guides/cli).
+
+```bash
+supabase start                       # ports 55xxx, see supabase/config.toml
+cp .env.example .env.local           # fill VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY from `supabase status`
+cp supabase/functions/.env.example supabase/functions/.env
+openssl rand -base64 32              # paste as CREDENTIAL_ENCRYPTION_KEY in supabase/functions/.env
+supabase functions serve --env-file supabase/functions/.env
+npm run dev
+```
+
+Sign up in the app, open *Einstellungen*, enter any token (fixture mode) and import the history.
+`GARMIN_MODE=live` switches to the real Garmin API once you have access – see [docs/GARMIN.md](docs/GARMIN.md).
+
+The local stack uses ports 55321–55329 so it does not collide with a default Supabase install (54321–54329).
+
+## Scripts
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Dev server |
+| `npm run build` | Type-check, build, create SPA `404.html` |
+| `npm run preview` | Serve the production build |
+| `npm run lint` | oxlint |
+| `npm run check:i18n` | Verify translation keys |
+| `npm run icons` | Regenerate PWA icons and iOS splash screens |
+
+## Deployment (GitHub Pages)
+
+`.github/workflows/pages.yml` builds in demo mode with `VITE_BASE=/<repository>/` and publishes `dist/`.
+To use a real backend, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as repository variables and
+host the functions on a Supabase project (note: a hosted project may incur costs).
+
+## Installing on a phone
+
+- **iOS (Safari)**: Share → *Zum Home-Bildschirm*.
+- **Android (Chrome)**: *Installieren* in *Einstellungen*, or the browser menu.
+
+## Documentation
+
+- [docs/PLAN.md](docs/PLAN.md) – PWA limits, feasibility, schema, MVP, open decisions
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/ANALYTICS.md](docs/ANALYTICS.md) – formulas and rules
+- [docs/GARMIN.md](docs/GARMIN.md) – integration status and security
+- [docs/adr/](docs/adr/) – architecture decisions
