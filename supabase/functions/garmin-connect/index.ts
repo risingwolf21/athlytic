@@ -3,6 +3,7 @@ import { encryptSecret } from '../_shared/server/crypto.ts'
 import { HttpError, handle } from '../_shared/server/http.ts'
 import { createGarminClient } from '../_shared/server/provider-factory.ts'
 import { GarminProvider } from '../_shared/garmin/provider.ts'
+import { GarminApiError } from '../_shared/garmin/types.ts'
 
 /** Stores a Garmin API token (encrypted) after verifying it against the Garmin API. The token never reaches the browser again. */
 Deno.serve(
@@ -15,8 +16,10 @@ Deno.serve(
     let externalUserId: string
     try {
       ;({ externalUserId } = await new GarminProvider(createGarminClient(token)).verify())
-    } catch {
-      throw new HttpError(400, 'Garmin did not accept this token')
+    } catch (error) {
+      console.error('Garmin verification failed:', error instanceof Error ? error.message : error)
+      const detail = error instanceof GarminApiError ? `Garmin API responded ${error.status}` : error instanceof Error ? error.message : 'unknown error'
+      throw new HttpError(400, `Garmin did not accept this token (${detail})`)
     }
 
     const { data: connection, error } = await db

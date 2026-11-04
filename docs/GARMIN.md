@@ -19,6 +19,16 @@ API access exists yet. Expect to adjust `client.ts`, `garmin/types.ts` and `garm
   code implements pull. If webhooks are granted, add a `garmin-webhook` edge function that calls the same
   `persist*` helpers in `_shared/server/sync.ts`.
 
+## Personal API notes
+
+- Base URL for the Personal tier: `https://personal.connectapi.garmin.com` (reachable; answers unauthenticated and
+  invalid-token requests with an OAuth `401 invalid_token` for every path, so paths cannot be probed without a token).
+- Tokens come from `connect.garmin.com/app/settings/personalApiToken` (Garmin issues a personal API key and lets you
+  generate access tokens). Check whether the generated token **expires**; an expired token yields
+  `401 Token is not active`.
+- If connecting fails, the toast now shows `Garmin API responded <status>`: 401 = token rejected/expired,
+  403 = missing permission, 404 = wrong endpoint path (`user/id` in `client.ts` is a guess).
+
 ## Modes
 
 `GARMIN_MODE` in `supabase/functions/.env` (hosted: `supabase secrets set`):
