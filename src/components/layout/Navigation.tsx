@@ -25,7 +25,7 @@ export function BottomNav() {
   return (
     <nav aria-label={t('nav.label')} className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/85 pb-safe backdrop-blur-xl lg:hidden">
       <ul className="mx-auto grid max-w-xl grid-cols-5">
-        {PRIMARY_NAV.map(({ to, key, icon: Icon }) => (
+        {[...PRIMARY_NAV, SETTINGS_NAV].map(({ to, key, icon: Icon }) => (
           <li key={to}>
             <NavLink to={to} end={to === '/'} className={({ isActive }) => cn('flex min-h-14 flex-col items-center justify-center gap-0.5 text-[0.6875rem] font-medium transition-colors', isActive ? 'text-primary' : 'text-muted-foreground')}>
               {({ isActive }) => (
