@@ -614,7 +614,7 @@ function simulate(through: string): SimState {
           lowestRespirationBreathsPerMinute: round1(11 + extraRng() * 1.5),
           highestRespirationBreathsPerMinute: round1(19 + extraRng() * 3),
           breathingDisruptionSeverity: illFactor > 0.5 ? 'MODERATE' : 'NONE',
-          scoreFeedback: sleepScore >= 80 ? 'POSITIVE_LONG_AND_DEEP' : sleepScore >= 60 ? 'POSITIVE_LONG_BUT_NOT_ENOUGH_REM' : 'NEGATIVE_NOT_ENOUGH_TOTAL',
+          scoreFeedback: sleepScore >= 80 ? 'POSITIVE_LONG_AND_DEEP' : sleepScore >= 60 ? 'NEGATIVE_LONG_BUT_NOT_ENOUGH_REM' : 'NEGATIVE_SHORT_AND_POOR_QUALITY',
           scoreInsight: prevLoad > 120 ? 'POSITIVE_EXERCISE' : 'NONE',
           scoreFactors: {
             totalDuration: { value: Math.round(clamp(((sleepH - 4.5) / 4) * 100, 20, 100)), qualifier: sleepH >= 7 ? 'EXCELLENT' : sleepH >= 6 ? 'GOOD' : 'FAIR', optimalStart: 7, optimalEnd: 9 },

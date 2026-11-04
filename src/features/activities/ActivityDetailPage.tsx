@@ -12,7 +12,8 @@ import { SportIcon } from '@/components/SportIcon'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { localDate } from '@/analytics'
-import { useActivityDetail, useSaveNotes } from '@/hooks/use-fitness-data'
+import { useActivityDetail, useFitnessData, useSaveNotes } from '@/hooks/use-fitness-data'
+import { EffectMessages, ExtraStats, FastestSplits, PowerSection, zoneConfigFor, zoneRangeLabel } from './ActivityExtras'
 import { formatClock, formatDay, formatDistanceKm, formatDuration, formatNumber, formatPace, formatSpeedKmh } from '@/lib/format'
 
 const RouteMap = lazy(() => import('@/components/charts/RouteMap'))
@@ -88,6 +89,7 @@ export default function ActivityDetailPage() {
   const { id } = useParams()
   const { t } = useTranslation()
   const query = useActivityDetail(id)
+  const fitness = useFitnessData()
   const [series, setSeries] = useState<ActivitySeriesKey>('elevation')
   const detail = query.data
 
@@ -111,6 +113,7 @@ export default function ActivityDetailPage() {
   const { activity, laps, samples } = detail
   const hasRoute = samples.lat.some((v) => v !== null)
   const isCycling = activity.sport === 'cycling'
+  const zoneConfig = zoneConfigFor(fitness.bundle?.hrZones ?? [], activity.sport)
   const seriesUnit: Record<ActivitySeriesKey, string> = { elevation: 'm', hr: 'bpm', speed: 'km/h', cadence: isCycling ? 'rpm' : 'spm' }
 
   return (
@@ -164,10 +167,15 @@ export default function ActivityDetailPage() {
         </Section>
       )}
 
+      {activity.extra && <ExtraStats extra={activity.extra} activity={activity} />}
+
+      {activity.extra && <PowerSection curve={activity.extra.powerCurveW} zones={activity.extra.powerZoneS} />}
+
       {activity.hrZoneSeconds && (
         <Section title={t('activities.hrZones')}>
           <Panel>
-            <HrZoneBar seconds={activity.hrZoneSeconds} zoneLabel={(zone) => t('activities.zone', { zone })} />
+            <HrZoneBar seconds={activity.hrZoneSeconds} zoneLabel={(zone) => { const range = zoneRangeLabel(zoneConfig, zone); return range ? `Z${zone} · ${range}` : t('activities.zone', { zone }) }} />
+            {zoneConfig && <p className="mt-3 text-xs text-muted-foreground">{t('activityExtra.zoneNote', { sport: zoneConfig.sport === 'DEFAULT' ? t('body.zoneSports.DEFAULT') : t(`sports.${activity.sport}`) })}</p>}
           </Panel>
         </Section>
       )}
@@ -177,6 +185,7 @@ export default function ActivityDetailPage() {
           <Panel className="space-y-4">
             <TrainingEffect label={t('activities.aerobic')} value={activity.aerobicTe} />
             <TrainingEffect label={t('activities.anaerobic')} value={activity.anaerobicTe} />
+            <EffectMessages extra={activity.extra} />
           </Panel>
         </Section>
       )}
@@ -208,6 +217,16 @@ export default function ActivityDetailPage() {
                 ))}
               </tbody>
             </table>
+          </Panel>
+        </Section>
+      )}
+
+      {activity.extra?.fastestSplitsS && <FastestSplits splits={activity.extra.fastestSplitsS} />}
+
+      {activity.extra?.description && (
+        <Section title={t('activities.description')}>
+          <Panel>
+            <p className="text-sm whitespace-pre-line">{activity.extra.description}</p>
           </Panel>
         </Section>
       )}

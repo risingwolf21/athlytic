@@ -30,6 +30,8 @@ series, so it is independently testable (tests are deferred for now, but nothing
 | `trainingLoad` | calculated | Activity load = device value if present, else Edwards TRIMP `0.5 · Σ(minutes in zone z · z)`. Day load = Σ activity loads. |
 | `acuteChronic` | calculated | `acute = EWMA₇(load)`, `chronic = EWMA₄₂(load)`, `balance = chronic − acute`, `ratio = acute/chronic`. |
 | `lagCorrelation` | calculated | Spearman ρ between `x[d]` and `y[d+lag]` over complete day pairs (≥ 21); p-value via Fisher `z = atanh(ρ)·√(n−3)`; reported if `|ρ| ≥ 0.3` and `p ≤ 0.01`. |
+| `sleepDebt` | calculated | `debtₙ = max(0, need − sleep)` per night, `need` = Garmin's adjusted sleep need (else the baseline). Insight if ≥ 4 of the last 7 nights have debt and the mean is ≥ 45 min. |
+| `intensityDistribution` | calculated | Share of time in HR zones 1–2 (easy), 3 (moderate) and 4–5 (hard) over the last 28 days; needs ≥ 3 activities with zone data and ≥ 2 h. |
 | `personalRecord` | measured | Best single-activity or single-day value over all imported data (duplicates excluded). |
 
 ## Files

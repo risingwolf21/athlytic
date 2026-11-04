@@ -46,6 +46,12 @@ If connecting fails, the toast shows the status: 401 = key rejected/expired, 403
 | Intraday heart rate | `GET /wellness-service/wellness/dailyHeartRate?date` | one call per day, **only the last 7 days** |
 | Activities | `GET /activitylist-service/activities/search/activities?startDate&endDate&start&limit` | paged (50) |
 | Activity detail | `GET /activity-service/activity/{id}` | sport type and lap aggregates from `splitSummaries` (fallback) |
+| Heart rate zone settings | `GET /biometric-service/heartRateZones/v2` | per sport; fail-soft |
+| Fitness age | `GET /fitnessage-service/fitnessage/v2/{date}?fullHistoryScan=true` | fail-soft |
+| Hydration | `GET /usersummary-service/stats/hydration/daily/{from}/{to}` | fail-soft |
+| Weight and body composition | `GET /weight-service/weight/all/{from}/{to}` | fail-soft; needs a smart scale or manual entries |
+| Intraday HRV | `GET /hrv-service/hrv/{date}` | last days only; fail-soft |
+| Intraday SpO2 | `GET /wellness-service/wellness/daily/spo2acclimation/{date}` | last days only; fail-soft |
 | Activity file | `GET /download-service/files/activity/{id}` | original FIT file (raw or ZIP-wrapped) |
 
 Known limitations of the Personal API (as of the spec):
@@ -90,6 +96,20 @@ Known limitations of the Personal API (as of the spec):
 Safeguards: a lock (`sync_state = 'syncing'` with expiry) prevents parallel runs; every run is logged in `sync_runs`;
 401/403 sets the connection to `error` with `last_error`; rate-limit `Retry-After` is surfaced by `GarminApiError`.
 Upserts are idempotent (unique keys per day / external id), duplicates are linked via `duplicate_of`.
+
+## Extended data
+
+Besides the core metrics, the daily summary, sleep and activity endpoints carry much more, all stored and displayed:
+
+- **Daily:** respiration, SpO2, hydration and sweat loss, stress time per level, Body Battery charge/drain and events, HRV baseline and weekly average.
+- **Sleep:** score feedback and insight, per-factor ratings, sleep need (baseline and adjusted), recommended bedtime window and alignment, naps, awakenings, SpO2 and respiration during sleep.
+- **Activities:** running dynamics, power (normalized, FTP, TSS, power curve and zones), stress and Body Battery change, temperature, elevation range, fastest splits, swim data and the description (`activities.extra`).
+- **Body:** weight, body fat, water, muscle, bone, BMI, visceral fat, fitness age with its components and the user's HR zone settings.
+
+Endpoints marked *fail-soft* never abort a sync: if a device or subscription does not provide the data, it is skipped.
+Garmin enum codes (sleep feedback, training-effect messages, …) are translated in `src/i18n/locales/de-garmin.ts`;
+unknown codes fall back to a readable version of the code. New fields only appear after the history is re-imported.
+Not imported: nutrition, menstrual cycle, wellness activities, workouts and weight goals.
 
 ## Data mapping
 
