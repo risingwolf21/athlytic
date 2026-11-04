@@ -77,6 +77,8 @@ export const de = {
   },
   dashboard: {
     title: 'Heute',
+    batteryNow: 'Body Battery aktuell',
+    batteryHint: 'Stand {{time}} · Max {{max}}',
     greeting: {
       morning: 'Guten Morgen, {{name}}',
       day: 'Hallo, {{name}}',
@@ -352,6 +354,22 @@ export const de = {
     spo2Events: 'SpO₂-Abfälle',
     breathing: 'Atmung: {{value}}',
     naps: 'Nickerchen',
+  },
+  todayDetail: {
+    title: 'Heute im Detail',
+    subtitle: 'Tatsächliche Werte vom {{date}}, verglichen mit dem Durchschnitt der Tage davor.',
+    value: 'Heute',
+    average: 'Ø',
+    difference: 'Abw.',
+    averageNote: 'Ø = Durchschnitt der bis zu {{days}} Tage vor dem {{date}}; erst ab 5 Werten angezeigt.',
+    curve: 'Tagesverlauf',
+    noCurve: 'Für diesen Tag liegt noch kein Verlauf vor. Er erscheint nach der nächsten Synchronisierung.',
+    now: 'Aktuell',
+    max: 'Maximum',
+    min: 'Minimum',
+    minHr: 'Niedrigster Puls',
+    maxHr: 'Höchster Puls',
+    sleep: { total: 'Schlafdauer', score: 'Schlafscore', respiration: 'Atmung /min', spo2: 'SpO₂', stress: 'Schlafstress', avgHr: 'Ø Puls' },
   },
   dayDetail: {
     stress: { rest: 'Ruhe', low: 'Niedrig', medium: 'Mittel', high: 'Hoch' },

@@ -9,6 +9,7 @@ import { KindBadge } from '@/components/KindBadge'
 import { ErrorState, PageSkeleton, Panel, Section } from '@/components/page'
 import { Segmented } from '@/components/Segmented'
 import { comparePoints, periodStat, periodWindow, trendPoints } from '@/features/analytics/series'
+import { TodayDetail } from '@/features/analytics/TodayDetail'
 import { useMetricFormatter } from '@/features/analytics/use-metric-format'
 import { useFitnessData } from '@/hooks/use-fitness-data'
 import { formatDay, formatNumber } from '@/lib/format'
@@ -70,6 +71,8 @@ export default function MetricDetailPage() {
   return (
     <div className="space-y-6">
       {header}
+      {data.bundle && <TodayDetail metric={metric} bundle={data.bundle} records={records} today={today} />}
+
       <Segmented label={t('analytics.period')} value={period} onChange={setPeriod} options={PERIODS.map((p) => ({ value: p, label: t(`analytics.periods.${p}`) }))} className="w-full" />
 
       <Panel className="space-y-4">

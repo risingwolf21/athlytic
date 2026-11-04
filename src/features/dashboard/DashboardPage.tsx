@@ -10,8 +10,8 @@ import { EmptyState, ErrorState, PageHeader, PageSkeleton, Panel, Section } from
 import { InsightCard } from '@/features/insights/InsightCard'
 import { summarizeMetric } from '@/features/dashboard/summary'
 import { useFitnessData } from '@/hooks/use-fitness-data'
-import { formatDay, formatHours, formatNumber, formatRelativeDays } from '@/lib/format'
-import { localDate, type MetricKey } from '@/analytics'
+import { formatClock, formatDay, formatHours, formatNumber, formatRelativeDays } from '@/lib/format'
+import { hourlyValues, intradayStats, latestIntraday, localDate, type MetricKey } from '@/analytics'
 import { ActivityRow } from '@/features/activities/ActivityRow'
 import { useAuthStore } from '@/stores/auth'
 
@@ -50,6 +50,8 @@ export default function DashboardPage() {
   const recentActivities = activities.filter((a) => localDate(a.startTime) >= addDays(today, -6)).slice(0, 3)
   const topInsight = insights[0]
   const extraTiles = EXTRA_TILES.map((metric) => summarizeMetric(records, metric, today)).filter((s) => s.value !== null || s.spark.some((v) => v !== null))
+  const batterySeries = data.bundle ? latestIntraday(data.bundle.intraday, 'body_battery', today) : null
+  const battery = batterySeries?.date === today ? intradayStats(batterySeries.points) : null
   const hasBody = (data.bundle?.body?.length ?? 0) > 0 || (data.bundle?.fitnessAge?.length ?? 0) > 0
 
   return (
@@ -91,6 +93,21 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 gap-3">
           {TILES.map((metric, index) => {
             const s = summarizeMetric(records, metric, today)
+            if (metric === 'bodyBatteryHigh' && battery && batterySeries) {
+              const stamp = formatClock(new Date(battery.last.at * 1000).toISOString())
+              return (
+                <MetricCard
+                  key={metric}
+                  index={index}
+                  metric={metric}
+                  label={t('dashboard.batteryNow')}
+                  value={battery.last.value}
+                  sparkline={hourlyValues(batterySeries.points)}
+                  hint={t('dashboard.batteryHint', { time: stamp, max: formatNumber(battery.max) })}
+                  to={`/analytics/${metric}`}
+                />
+              )
+            }
             const range = s.baseline ? `${formatNumber(s.baseline.low, metric === 'sleepHours' ? 1 : 0)}–${formatNumber(s.baseline.high, metric === 'sleepHours' ? 1 : 0)}` : null
             return (
               <MetricCard

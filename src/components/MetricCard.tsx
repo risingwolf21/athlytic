@@ -16,6 +16,8 @@ interface MetricCardProps {
   /** Pre-formatted value for metrics that need special formatting (e.g. sleep as 7:24 h). */
   displayValue?: string
   unit?: string
+  /** Replaces the metric's default label, e.g. "Body Battery aktuell". */
+  label?: string
   sparkline?: (number | null)[]
   deltaRatio?: number | null
   /** Small line below the value, e.g. "Baseline 52 ms". */
@@ -26,7 +28,7 @@ interface MetricCardProps {
 }
 
 /** Dashboard tile: label, big number, change versus the previous period and a trend line. */
-export function MetricCard({ metric, value, displayValue, unit, sparkline, deltaRatio = null, hint, to, className, index = 0 }: MetricCardProps) {
+export function MetricCard({ metric, value, displayValue, unit, label, sparkline, deltaRatio = null, hint, to, className, index = 0 }: MetricCardProps) {
   const { t } = useTranslation()
   const { color, icon: Icon } = METRIC_STYLE[metric]
   const def = METRICS[metric]
@@ -40,7 +42,7 @@ export function MetricCard({ metric, value, displayValue, unit, sparkline, delta
           <span className="grid size-7 shrink-0 place-items-center rounded-lg" style={{ background: `color-mix(in oklch, ${color} 14%, transparent)`, color }}>
             <Icon className="size-4" aria-hidden />
           </span>
-          <span className="min-w-0 text-[0.8125rem] leading-tight font-medium text-muted-foreground">{t(`metrics.${metric}.label`)}</span>
+          <span className="min-w-0 text-[0.8125rem] leading-tight font-medium text-muted-foreground">{label ?? t(`metrics.${metric}.label`)}</span>
         </div>
       </div>
       <div className="mt-3 flex items-baseline gap-1.5">

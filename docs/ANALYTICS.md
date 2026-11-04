@@ -70,3 +70,7 @@ Design consequences: personal baselines instead of fixed limits; several signals
 2. If it is calculated, add/extend a formula in `formulas.ts` and this document.
 3. Add German message templates to `src/i18n/locales/de-content.ts` under `insights.<messageKey>`.
 4. Run `npm run check:i18n`.
+
+## Today in detail (`src/analytics/today.ts`)
+
+Metric pages show the latest day's actual data (intraday curves, sleep stages, stress bands) next to a **28-day average of the preceding days** (`windowAverage`; the day itself is excluded, shown only with at least 5 values). The difference is `value − average`. The dashboard Body Battery tile shows the **latest intraday reading** (`intradayStats`), not the daily maximum; its freshness equals the last sync.
