@@ -44,7 +44,7 @@ Heuristic, not a diagnosis. Evidence summary (also shown in the app on the Recov
 - Personal-baseline deviations and a ≥ 2-day persistence rule reduce false alarms (Fitbit-based study, 2026).
 - Real world (JMIR Form Res 2024, 470 health-care workers): ~2 % false alarms per day but only 4–10 % of alerts were infections; hard training, poor sleep, stress and alcohol move the same signals.
 
-Design consequences: personal baselines instead of fixed limits; several signals at once; persistence over days; alerts list other plausible explanations (high acute/chronic load, sleep debt, high stress); wording never claims illness. Susceptibility to infections cannot be predicted from this data; past "episodes" are not validated because the app has no illness labels. Skin temperature is not imported yet and would be a useful extra signal.
+Design consequences: personal baselines instead of fixed limits; several signals at once; persistence over days; alerts list other plausible explanations (high acute/chronic load, sleep debt, high stress); wording never claims illness. Susceptibility to infections cannot be predicted from this data; past "episodes" are not validated because the app has no illness labels. Skin temperature would be a useful extra signal but the Garmin Personal API does not provide it (see `docs/GARMIN.md`).
 
 ## Files
 

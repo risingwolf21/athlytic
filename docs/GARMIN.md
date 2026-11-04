@@ -64,6 +64,7 @@ Known limitations of the Personal API (as of the spec):
   Detail rows stored without samples are refetched when the activity is opened.
 - **No intraday stress series** (only daily averages and proportions), so the stress timeline is empty.
 - **No daily VO2max or training-readiness endpoint.** VO2max is taken from the day's latest activity that reports one.
+- **No overnight skin temperature.** The Personal API spec (all 26 endpoints) has no skin-temperature values, only the boolean `isSkinTempMct` on the menstrual-cycle summary. Activities report ambient `min/maxTemperature`, which is not a body signal. Skin temperature is only available through the enterprise Health API (requires Garmin approval) or a manual data export, so the illness pattern uses resting HR, HRV, respiration and SpO₂.
 - Heart-rate zone times per activity come from `hrTimeInZone_1…5` on the activity summary.
 
 ## Modes
