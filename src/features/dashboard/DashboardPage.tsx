@@ -1,6 +1,6 @@
 import { Link } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Scale } from 'lucide-react'
 import { addDays } from '@shared/dates.ts'
 import { LoadChart } from '@/components/charts/LoadChart'
 import { RingGauge } from '@/components/charts/RingGauge'
@@ -16,6 +16,7 @@ import { ActivityRow } from '@/features/activities/ActivityRow'
 import { useAuthStore } from '@/stores/auth'
 
 const TILES: MetricKey[] = ['steps', 'restingHr', 'hrv', 'sleepHours', 'avgStress', 'bodyBatteryHigh']
+const EXTRA_TILES: MetricKey[] = ['spo2Avg', 'respirationAvg', 'hydrationMl', 'highStressMin', 'weightKg', 'bodyFatPct']
 
 function greetingKey(hour: number) {
   if (hour < 11) return 'morning'
@@ -48,6 +49,8 @@ export default function DashboardPage() {
   const loadWindow = records.filter((r) => r.date >= addDays(today, -41))
   const recentActivities = activities.filter((a) => localDate(a.startTime) >= addDays(today, -6)).slice(0, 3)
   const topInsight = insights[0]
+  const extraTiles = EXTRA_TILES.map((metric) => summarizeMetric(records, metric, today)).filter((s) => s.value !== null || s.spark.some((v) => v !== null))
+  const hasBody = (data.bundle?.body.length ?? 0) > 0 || (data.bundle?.fitnessAge.length ?? 0) > 0
 
   return (
     <div className="space-y-6">
@@ -106,6 +109,29 @@ export default function DashboardPage() {
         </div>
         <p className="px-1 text-xs text-muted-foreground">{t('dashboard.deltaNote')}</p>
       </Section>
+
+      {extraTiles.length > 0 && (
+        <Section title={t('dashboard.moreVitals')}>
+          <div className="grid grid-cols-2 gap-3">
+            {extraTiles.map((s, index) => (
+              <MetricCard key={s.metric} index={index} metric={s.metric} value={s.value} sparkline={s.spark} deltaRatio={s.deltaRatio} hint={s.value === null ? t('dashboard.noValueToday') : ''} to={`/analytics/${s.metric}`} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {hasBody && (
+        <Link to="/body" className="surface flex min-h-14 items-center gap-3 rounded-2xl px-4 py-3 transition-transform active:scale-[0.985]">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+            <Scale className="size-[1.125rem]" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{t('body.title')}</p>
+            <p className="text-xs text-muted-foreground">{t('body.linkHint')}</p>
+          </div>
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        </Link>
+      )}
 
       <Section title={t('dashboard.loadTitle')} action={<KindBadge kind="calculated" />}>
         <Panel>

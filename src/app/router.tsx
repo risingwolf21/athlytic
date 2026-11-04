@@ -10,6 +10,7 @@ const ActivityDetailPage = lazy(() => import('@/features/activities/ActivityDeta
 const RecoveryPage = lazy(() => import('@/features/recovery/RecoveryPage'))
 const AnalyticsPage = lazy(() => import('@/features/analytics/AnalyticsPage'))
 const MetricDetailPage = lazy(() => import('@/features/analytics/MetricDetailPage'))
+const BodyPage = lazy(() => import('@/features/body/BodyPage'))
 const InsightsPage = lazy(() => import('@/features/insights/InsightsPage'))
 const InsightDetailPage = lazy(() => import('@/features/insights/InsightDetailPage'))
 const MethodsPage = lazy(() => import('@/features/insights/MethodsPage'))
@@ -39,6 +40,7 @@ export const router = createBrowserRouter(
             { path: 'activities', element: <ActivitiesPage /> },
             { path: 'activities/:id', element: <ActivityDetailPage /> },
             { path: 'recovery', element: <RecoveryPage /> },
+            { path: 'body', element: <BodyPage /> },
             { path: 'insights', element: <InsightsPage /> },
             { path: 'insights/methods', element: <MethodsPage /> },
             { path: 'insights/:id', element: <InsightDetailPage /> },
