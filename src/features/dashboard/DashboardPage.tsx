@@ -50,7 +50,7 @@ export default function DashboardPage() {
   const recentActivities = activities.filter((a) => localDate(a.startTime) >= addDays(today, -6)).slice(0, 3)
   const topInsight = insights[0]
   const extraTiles = EXTRA_TILES.map((metric) => summarizeMetric(records, metric, today)).filter((s) => s.value !== null || s.spark.some((v) => v !== null))
-  const hasBody = (data.bundle?.body.length ?? 0) > 0 || (data.bundle?.fitnessAge.length ?? 0) > 0
+  const hasBody = (data.bundle?.body?.length ?? 0) > 0 || (data.bundle?.fitnessAge?.length ?? 0) > 0
 
   return (
     <div className="space-y-6">

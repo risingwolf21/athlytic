@@ -205,15 +205,15 @@ export class HttpGarminClient implements GarminClient {
   /** Heart rate zone settings and Fitness Age are not tied to a date window; they are refreshed with every slice. */
   private async addProfileData(to: string, payload: GarminRangePayload): Promise<void> {
     const raw = (resourceType: string, externalId: string, body: unknown) => payload.raw!.push({ resourceType, externalId, calendarDate: null, payload: body })
-    const zones = await this.soft<ApiHeartRateZones[]>('biometric-service/heartRateZones/v2')
-    for (const z of zones ?? []) {
+    const zones = await this.softList<ApiHeartRateZones>('biometric-service/heartRateZones/v2')
+    for (const z of zones) {
       const mapped = mapHeartRateZones(z)
       if (!mapped) continue
       raw('hr_zones', `hrzones:${mapped.sport}`, z)
       payload.hrZones.push(mapped)
     }
-    const ages = await this.soft<ApiFitnessAge[]>(`fitnessage-service/fitnessage/v2/${to}`, { fullHistoryScan: 'true' })
-    for (const a of ages ?? []) {
+    const ages = await this.softList<ApiFitnessAge>(`fitnessage-service/fitnessage/v2/${to}`, { fullHistoryScan: 'true' })
+    for (const a of ages) {
       const mapped = mapFitnessAge(a, to)
       if (!mapped) continue
       raw('fitness_age', `fitnessage:${mapped.calendarDate}`, a)
@@ -222,9 +222,9 @@ export class HttpGarminClient implements GarminClient {
   }
 
   private async addHydration(start: string, end: string, payload: GarminRangePayload, raw: RawSink): Promise<void> {
-    const days = await this.soft<ApiHydrationDay[]>(`usersummary-service/stats/hydration/daily/${start}/${end}`)
+    const days = await this.softList<ApiHydrationDay>(`usersummary-service/stats/hydration/daily/${start}/${end}`)
     const byDate = new Map(payload.dailies.map((d) => [d.calendarDate, d]))
-    for (const h of days ?? []) {
+    for (const h of days) {
       const daily = h.calendarDate ? byDate.get(h.calendarDate) : undefined
       if (!daily || !h.calendarDate) continue
       raw('hydration', `hydration:${h.calendarDate}`, h.calendarDate, h)
@@ -233,9 +233,9 @@ export class HttpGarminClient implements GarminClient {
   }
 
   private async addWeights(start: string, end: string, payload: GarminRangePayload, raw: RawSink): Promise<void> {
-    const entries = await this.soft<ApiWeightEntry[]>(`weight-service/weight/all/${start}/${end}`)
+    const entries = await this.softList<ApiWeightEntry>(`weight-service/weight/all/${start}/${end}`)
     const latestByDate = new Map<string, ReturnType<typeof mapWeight>>()
-    for (const entry of [...(entries ?? [])].sort((a, b) => String(a.timestampGMT ?? '').localeCompare(String(b.timestampGMT ?? '')))) {
+    for (const entry of [...entries].sort((a, b) => String(a.timestampGMT ?? '').localeCompare(String(b.timestampGMT ?? '')))) {
       const mapped = mapWeight(entry)
       if (!mapped) continue
       raw('weight', `weight:${mapped.calendarDate}`, mapped.calendarDate, entry)
@@ -344,6 +344,17 @@ export class HttpGarminClient implements GarminClient {
       if (error instanceof GarminApiError && (error.status === 401 || error.status === 429)) throw error
       return undefined
     }
+  }
+
+  /** Like `soft`, but always returns a list: some endpoints wrap the list in an object or return a single object. */
+  private async softList<T>(path: string, params: Record<string, string> = {}): Promise<T[]> {
+    const body = await this.soft<unknown>(path, params)
+    if (Array.isArray(body)) return body as T[]
+    if (body && typeof body === 'object') {
+      const nested = Object.values(body).find((v): v is T[] => Array.isArray(v))
+      return nested ?? [body as T]
+    }
+    return []
   }
 
   private async getBytes(path: string): Promise<Uint8Array> {

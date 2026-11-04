@@ -48,7 +48,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <PersistQueryClientProvider
       client={queryClient}
-      persistOptions={{ persister: idbPersister, maxAge: WEEK_MS, buster: `athlytic-${dataMode}-1` }}
+      persistOptions={{ persister: idbPersister, maxAge: WEEK_MS, buster: `athlytic-${dataMode}-2` }}
       onSuccess={() => void queryClient.resumePausedMutations()}
     >
       <ThemeSync />
