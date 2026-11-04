@@ -1,5 +1,5 @@
 import { addDays, eachDay } from '@shared/dates.ts'
-import type { Activity, DailyMetrics, NormalizedBundle, SleepSession, UserProfile } from '@shared/domain.ts'
+import type { Activity, BodyComposition, DailyMetrics, NormalizedBundle, SleepSession, UserProfile } from '@shared/domain.ts'
 import { activityLoad, computeLoadSeries, localDate, type LoadSource } from './load.ts'
 import type { MetricKey } from './metrics.ts'
 import { computeRecovery, type RecoveryEstimate } from './recovery.ts'
@@ -22,6 +22,16 @@ export interface DailyRecord {
   floors: number | null
   activeKcal: number | null
   vo2Max: number | null
+  spo2Avg: number | null
+  respirationAvg: number | null
+  hydrationMl: number | null
+  /** Minutes in the device's "high stress" band. */
+  highStressMin: number | null
+  /** Calculated: sleep need minus actual sleep, in minutes. Positive means a deficit, never below 0. */
+  sleepDebtMin: number | null
+  sleepStress: number | null
+  weightKg: number | null
+  bodyFatPct: number | null
   /** Sum of the day's activity loads; 0 on rest days. */
   trainingLoad: number
   /** `provider` if every contributing load was reported by the device. */
@@ -39,22 +49,32 @@ export interface DailyRecord {
 }
 
 export interface AnalyticsInput {
-  bundle: Pick<NormalizedBundle, 'daily' | 'sleep' | 'activities'>
+  bundle: Pick<NormalizedBundle, 'daily' | 'sleep' | 'activities'> & Partial<Pick<NormalizedBundle, 'body'>>
   profile: Pick<UserProfile, 'maxHr'>
 }
 
 const scalar = (v: number | null) => (isNum(v) ? v : null)
 
+/** Tonight's adjusted sleep need (device estimate) minus the sleep actually recorded; null when the device gave no need. */
+export function sleepDebt(sleep: SleepSession | undefined): number | null {
+  const need = sleep?.need
+  const needed = need?.actualMin ?? need?.baselineMin
+  if (!sleep || !isNum(needed)) return null
+  return Math.max(0, needed - sleep.durationS / 60)
+}
+
 export function buildDailyRecords({ bundle, profile }: AnalyticsInput): DailyRecord[] {
   const dailyByDate = new Map<DateString, DailyMetrics>(bundle.daily.map((d) => [d.date, d]))
   const sleepByDate = new Map<DateString, SleepSession>(bundle.sleep.map((s) => [s.date, s]))
+  const bodyByDate = new Map<DateString, BodyComposition>()
+  for (const b of [...(bundle.body ?? [])].sort((a, c) => (a.measuredAt ?? '').localeCompare(c.measuredAt ?? ''))) bodyByDate.set(b.date, b)
   const activitiesByDate = new Map<DateString, Activity[]>()
   for (const a of bundle.activities) {
     const date = localDate(a.startTime)
     activitiesByDate.set(date, [...(activitiesByDate.get(date) ?? []), a])
   }
 
-  const dates = [...dailyByDate.keys(), ...sleepByDate.keys(), ...activitiesByDate.keys()].sort()
+  const dates = [...dailyByDate.keys(), ...sleepByDate.keys(), ...activitiesByDate.keys(), ...bodyByDate.keys()].sort()
   const first = dates[0]
   const last = dates[dates.length - 1]
   if (!first || !last) return []
@@ -75,6 +95,7 @@ export function buildDailyRecords({ bundle, profile }: AnalyticsInput): DailyRec
     const s = sleepByDate.get(date)
     const acts = activitiesByDate.get(date) ?? []
     const sleepHours = s ? s.durationS / 3600 : null
+    const body = bodyByDate.get(date)
     const deepPct = s && s.deepS != null && s.durationS > 0 ? (s.deepS / s.durationS) * 100 : null
     return {
       date,
@@ -91,6 +112,14 @@ export function buildDailyRecords({ bundle, profile }: AnalyticsInput): DailyRec
       floors: scalar(d?.floorsClimbed ?? null),
       activeKcal: scalar(d?.activeKcal ?? null),
       vo2Max: scalar(d?.vo2Max ?? null),
+      spo2Avg: scalar(d?.spo2Avg ?? null),
+      respirationAvg: scalar(d?.respirationAvg ?? null),
+      hydrationMl: scalar(d?.hydrationMl ?? null),
+      highStressMin: isNum(d?.stressHighS) ? d.stressHighS / 60 : null,
+      sleepDebtMin: sleepDebt(s),
+      sleepStress: scalar(s?.avgSleepStress ?? null),
+      weightKg: scalar(body?.weightKg ?? null),
+      bodyFatPct: scalar(body?.bodyFatPct ?? null),
       trainingLoad: (dayLoads[i] as { total: number }).total,
       loadSource: (dayLoads[i] as { source: LoadSource | null }).source,
       acuteLoad: load.acute[i] as number,

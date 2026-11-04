@@ -1,4 +1,4 @@
-import { Activity, BatteryMedium, Bed, Flame, Footprints, Gauge, HeartPulse, Mountain, Route, Timer, TrendingUp, Waves, Zap, type LucideIcon } from 'lucide-react'
+import { Activity, BatteryMedium, Bed, Droplets, Flame, Footprints, Gauge, HeartPulse, Mountain, Percent, Route, Scale, Timer, TrendingUp, Waves, Wind, Zap, type LucideIcon } from 'lucide-react'
 import type { MetricKey } from '@/analytics'
 
 export interface MetricStyle {
@@ -29,7 +29,15 @@ export const METRIC_STYLE: Record<MetricKey, MetricStyle> = {
   distanceKm: { color: 'var(--m-steps)', icon: Route },
   durationMin: { color: 'var(--m-load)', icon: Timer },
   elevationGainM: { color: 'var(--m-elevation)', icon: Mountain },
+  spo2Avg: { color: 'var(--m-hr)', icon: Droplets },
+  respirationAvg: { color: 'var(--m-battery)', icon: Wind },
+  hydrationMl: { color: 'var(--m-steps)', icon: Droplets },
+  highStressMin: { color: 'var(--m-stress)', icon: Waves },
+  sleepDebtMin: { color: 'var(--m-sleep)', icon: Bed },
+  sleepStress: { color: 'var(--m-stress)', icon: Waves },
+  weightKg: { color: 'var(--m-recovery)', icon: Scale },
+  bodyFatPct: { color: 'var(--m-recovery)', icon: Percent },
 }
 
 /** Metrics offered in the Analytics page selector, in display order. */
-export const ANALYTICS_METRICS: MetricKey[] = ['steps', 'restingHr', 'hrv', 'sleepHours', 'sleepScore', 'avgStress', 'bodyBatteryHigh', 'trainingLoad', 'recovery', 'distanceKm', 'elevationGainM', 'vo2Max']
+export const ANALYTICS_METRICS: MetricKey[] = ['steps', 'restingHr', 'hrv', 'sleepHours', 'sleepScore', 'avgStress', 'bodyBatteryHigh', 'trainingLoad', 'recovery', 'distanceKm', 'elevationGainM', 'vo2Max', 'spo2Avg', 'respirationAvg', 'highStressMin', 'sleepDebtMin', 'hydrationMl', 'weightKg', 'bodyFatPct']

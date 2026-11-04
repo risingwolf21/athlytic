@@ -22,6 +22,14 @@ export const METRIC_KEYS = [
   'distanceKm',
   'durationMin',
   'elevationGainM',
+  'spo2Avg',
+  'respirationAvg',
+  'hydrationMl',
+  'highStressMin',
+  'sleepDebtMin',
+  'sleepStress',
+  'weightKg',
+  'bodyFatPct',
 ] as const
 
 export type MetricKey = (typeof METRIC_KEYS)[number]
@@ -29,7 +37,7 @@ export type MetricKey = (typeof METRIC_KEYS)[number]
 export interface MetricDefinition {
   key: MetricKey
   kind: ValueKind
-  unit: 'steps' | 'bpm' | 'ms' | 'h' | 'score' | 'percent' | 'min' | 'kcal' | 'floors' | 'ml/kg/min' | 'load' | 'km' | 'm'
+  unit: 'steps' | 'bpm' | 'ms' | 'h' | 'score' | 'percent' | 'min' | 'kcal' | 'floors' | 'ml/kg/min' | 'load' | 'km' | 'm' | 'brpm' | 'kg' | 'ml'
   /** How daily values are combined into weeks/months/years. */
   aggregate: 'sum' | 'mean'
   polarity: Polarity
@@ -62,6 +70,14 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
   distanceKm: def({ key: 'distanceKm', kind: 'calculated', unit: 'km', aggregate: 'sum', polarity: 'neutral', decimals: 1, trendThreshold: 0.15 }),
   durationMin: def({ key: 'durationMin', kind: 'calculated', unit: 'min', aggregate: 'sum', polarity: 'neutral', decimals: 0, trendThreshold: 0.15 }),
   elevationGainM: def({ key: 'elevationGainM', kind: 'calculated', unit: 'm', aggregate: 'sum', polarity: 'neutral', decimals: 0, trendThreshold: 0.15 }),
+  spo2Avg: def({ key: 'spo2Avg', kind: 'measured', unit: 'percent', aggregate: 'mean', polarity: 'higher-better', decimals: 0, trendThreshold: 0.01 }),
+  respirationAvg: def({ key: 'respirationAvg', kind: 'measured', unit: 'brpm', aggregate: 'mean', polarity: 'neutral', decimals: 1, trendThreshold: 0.05 }),
+  hydrationMl: def({ key: 'hydrationMl', kind: 'measured', unit: 'ml', aggregate: 'mean', polarity: 'higher-better', decimals: 0, trendThreshold: 0.15 }),
+  highStressMin: def({ key: 'highStressMin', kind: 'measured', unit: 'min', aggregate: 'mean', polarity: 'lower-better', decimals: 0, trendThreshold: 0.2 }),
+  sleepDebtMin: def({ key: 'sleepDebtMin', kind: 'calculated', unit: 'min', aggregate: 'mean', polarity: 'lower-better', decimals: 0, trendThreshold: 0.2 }),
+  sleepStress: def({ key: 'sleepStress', kind: 'measured', unit: 'score', aggregate: 'mean', polarity: 'lower-better', decimals: 0, trendThreshold: 0.1 }),
+  weightKg: def({ key: 'weightKg', kind: 'measured', unit: 'kg', aggregate: 'mean', polarity: 'neutral', decimals: 1, trendThreshold: 0.01 }),
+  bodyFatPct: def({ key: 'bodyFatPct', kind: 'measured', unit: 'percent', aggregate: 'mean', polarity: 'neutral', decimals: 1, trendThreshold: 0.03 }),
 }
 
 export const isMetricKey = (value: string | undefined): value is MetricKey => !!value && value in METRICS

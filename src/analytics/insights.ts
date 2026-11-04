@@ -4,14 +4,14 @@ import { DEFAULT_BASELINE, computeBaseline, deviationFromBaseline, type Baseline
 import { lagCorrelation, isNoteworthy } from './correlation.ts'
 import { latestDataDate, recordOn, seriesOf, type DailyRecord } from './daily.ts'
 import type { FormulaId } from './formulas.ts'
-import { acuteChronicRatio } from './load.ts'
+import { acuteChronicRatio, localDate } from './load.ts'
 import { METRICS, type MetricKey } from './metrics.ts'
 import { isRecent, personalRecords } from './records.ts'
 import { sliceSeries } from './aggregate.ts'
 import { classifyTrend, compareWindows } from './trend.ts'
 import type { DataPoint, DateString } from './types.ts'
 
-export type InsightKind = 'deviation' | 'trend' | 'correlation' | 'record' | 'load' | 'recovery'
+export type InsightKind = 'deviation' | 'trend' | 'correlation' | 'record' | 'load' | 'recovery' | 'sleep'
 export type InsightTone = 'positive' | 'attention' | 'neutral'
 export type Confidence = 'low' | 'medium' | 'high'
 
@@ -57,8 +57,8 @@ export const DEFAULT_INSIGHT_OPTIONS: InsightOptions = {
   baseline: DEFAULT_BASELINE,
   trendWindowDays: 14,
   correlationWindowDays: 180,
-  deviationMetrics: ['hrv', 'restingHr', 'sleepHours', 'avgStress'],
-  trendMetrics: ['restingHr', 'hrv', 'sleepHours', 'steps', 'avgStress', 'trainingLoad', 'vo2Max'],
+  deviationMetrics: ['hrv', 'restingHr', 'sleepHours', 'avgStress', 'spo2Avg', 'respirationAvg'],
+  trendMetrics: ['restingHr', 'hrv', 'sleepHours', 'steps', 'avgStress', 'trainingLoad', 'vo2Max', 'weightKg', 'bodyFatPct'],
   maxInsights: 12,
 }
 
@@ -69,6 +69,8 @@ const CORRELATION_PAIRS: { x: MetricKey; y: MetricKey; lag: number }[] = [
   { x: 'sleepScore', y: 'bodyBatteryHigh', lag: 0 },
   { x: 'avgStress', y: 'sleepScore', lag: 1 },
   { x: 'steps', y: 'sleepScore', lag: 0 },
+  { x: 'avgStress', y: 'sleepStress', lag: 0 },
+  { x: 'trainingLoad', y: 'sleepDebtMin', lag: 1 },
 ]
 
 function toneFor(metric: MetricKey, direction: 'up' | 'down'): InsightTone {
@@ -225,7 +227,58 @@ export function generateInsights(
     }
   }
 
-  // 6) Fresh personal records
+  // 6) Sleep debt over the last week
+  const debtFrom = addDays(today, -6)
+  const debtPoints = points(records, 'sleepDebtMin', debtFrom, today)
+  const debtValues = debtPoints.map((p) => p.value).filter((v): v is number => v !== null)
+  if (debtValues.length >= 4) {
+    const avg = debtValues.reduce((a, b) => a + b, 0) / debtValues.length
+    if (avg >= 45) {
+      insights.push({
+        id: `sleep:debt:${today}`,
+        kind: 'sleep',
+        tone: 'attention',
+        priority: 58 + Math.min(20, avg / 6),
+        messageKey: 'sleep.debt',
+        params: { minutes: round(avg, 0), nights: debtValues.length },
+        metric: 'sleepDebtMin',
+        formula: 'sleepDebt',
+        confidence: debtValues.length >= 6 ? 'high' : 'medium',
+        date: today,
+        evidence: [{ metric: 'sleepDebtMin', role: 'value', from: debtFrom, to: today, points: debtPoints }],
+      })
+    }
+  }
+
+  // 7) How training time is spread over intensity zones
+  const zoneFrom = addDays(today, -27)
+  const zoned = activities.filter((a) => a.hrZoneSeconds && localDate(a.startTime) >= zoneFrom && localDate(a.startTime) <= today)
+  const zoneTotals = zoned.reduce((acc, a) => (a.hrZoneSeconds as number[]).map((s, i) => (acc[i] ?? 0) + s), [] as number[])
+  const zoneSeconds = zoneTotals.reduce((a, b) => a + b, 0)
+  if (zoned.length >= 3 && zoneSeconds >= 2 * 3600) {
+    const easy = ((zoneTotals[0] ?? 0) + (zoneTotals[1] ?? 0)) / zoneSeconds
+    const moderate = (zoneTotals[2] ?? 0) / zoneSeconds
+    const hard = ((zoneTotals[3] ?? 0) + (zoneTotals[4] ?? 0)) / zoneSeconds
+    const tooMuchModerate = moderate >= 0.4
+    const balanced = easy >= 0.7 && hard >= 0.08
+    if (tooMuchModerate || balanced) {
+      insights.push({
+        id: `load:intensity:${today}`,
+        kind: 'load',
+        tone: balanced ? 'positive' : 'neutral',
+        priority: balanced ? 42 : 52,
+        messageKey: balanced ? 'intensity.balanced' : 'intensity.moderate',
+        params: { easy: round(easy * 100, 0), moderate: round(moderate * 100, 0), hard: round(hard * 100, 0), activities: zoned.length, hours: round(zoneSeconds / 3600, 1) },
+        metric: 'trainingLoad',
+        formula: 'intensityDistribution',
+        confidence: zoned.length >= 8 ? 'high' : 'medium',
+        date: today,
+        evidence: [{ metric: 'trainingLoad', role: 'value', from: zoneFrom, to: today, points: points(records, 'trainingLoad', zoneFrom, today) }],
+      })
+    }
+  }
+
+  // 8) Fresh personal records
   for (const rec of personalRecords(activities, records)) {
     if (!isRecent(rec, today, 10) || rec.previousValue === null) continue
     insights.push({

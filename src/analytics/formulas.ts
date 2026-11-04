@@ -10,6 +10,8 @@ export type FormulaId =
   | 'acuteChronic'
   | 'lagCorrelation'
   | 'personalRecord'
+  | 'sleepDebt'
+  | 'intensityDistribution'
 
 export interface FormulaDoc {
   id: FormulaId
@@ -69,5 +71,17 @@ export const FORMULAS: Record<FormulaId, FormulaDoc> = {
     kind: 'measured',
     formula: 'best single-activity or single-day value of a metric over all imported data',
     inputs: ['distanceKm', 'elevationGainM', 'steps', 'hrv', 'restingHr', 'sleepScore'],
+  },
+  sleepDebt: {
+    id: 'sleepDebt',
+    kind: 'calculated',
+    formula: 'debtₙ = max(0, need − sleep) per night;  need = device estimate (baseline adjusted for training, HRV and naps);  reported if mean(last 7 nights) ≥ 45 min and ≥ 4 nights',
+    inputs: ['sleepDebtMin', 'sleepHours'],
+  },
+  intensityDistribution: {
+    id: 'intensityDistribution',
+    kind: 'calculated',
+    formula: 'easy = time in HR zones 1–2;  moderate = zone 3;  hard = zones 4–5;  shares over the last 28 days from activities with zone data (≥ 3 activities, ≥ 2 h)',
+    inputs: ['trainingLoad', 'durationMin'],
   },
 }
