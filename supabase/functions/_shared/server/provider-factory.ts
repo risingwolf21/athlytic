@@ -13,7 +13,7 @@ export function createGarminClient(token: string): GarminClient {
   if (garminMode() === 'fixture') return new FixtureGarminClient()
   const baseUrl = Deno.env.get('GARMIN_API_BASE_URL')
   if (!baseUrl) throw new Error('GARMIN_API_BASE_URL is not configured')
-  return new HttpGarminClient({ baseUrl, token })
+  return new HttpGarminClient({ baseUrl, apiKey: token })
 }
 
 /** Builds the provider for a stored connection by decrypting its credentials. */

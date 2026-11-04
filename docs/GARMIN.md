@@ -19,15 +19,21 @@ API access exists yet. Expect to adjust `client.ts`, `garmin/types.ts` and `garm
   code implements pull. If webhooks are granted, add a `garmin-webhook` edge function that calls the same
   `persist*` helpers in `_shared/server/sync.ts`.
 
-## Personal API notes
+## Personal API authentication
 
-- Base URL for the Personal tier: `https://personal.connectapi.garmin.com` (reachable; answers unauthenticated and
-  invalid-token requests with an OAuth `401 invalid_token` for every path, so paths cannot be probed without a token).
-- Tokens come from `connect.garmin.com/app/settings/personalApiToken` (Garmin issues a personal API key and lets you
-  generate access tokens). Check whether the generated token **expires**; an expired token yields
-  `401 Token is not active`.
-- If connecting fails, the toast now shows `Garmin API responded <status>`: 401 = token rejected/expired,
-  403 = missing permission, 404 = wrong endpoint path (`user/id` in `client.ts` is a guess).
+1. Create a personal API key at `connect.garmin.com/app/settings/personalApiToken` (you choose its expiry).
+2. Exchange it for an access token:
+   `POST https://personal.connectapi.garmin.com/personalapitoken-service/personal-api/personal-api-key/token`
+   with `Authorization: ApiKey <key>`.
+3. Send the access token as `Authorization: Bearer <access token>` on data requests.
+
+The API key itself is **not** a Bearer token (it yields `401 invalid_token`). `HttpGarminClient` stores only the API
+key (encrypted), exchanges it per sync run, caches the access token until it expires and re-exchanges it once on a 401.
+The token response is parsed leniently (JSON with `access_token`/`accessToken`/`token`, or a bare string) because its
+exact shape is not documented publicly.
+
+If connecting fails, the toast shows the status: 401 = key rejected/expired, 403 = missing permission,
+404 = wrong endpoint path (`user/id` in `client.ts` is still a guess).
 
 ## Modes
 
@@ -45,6 +51,7 @@ API access exists yet. Expect to adjust `client.ts`, `garmin/types.ts` and `garm
 - `provider_credentials` and `raw_payloads` have RLS enabled and all client privileges revoked – even the user's own
   JWT cannot read them.
 - Tokens never appear in frontend code, logs or responses. `garmin-disconnect` deletes the credentials.
+- What is stored is the long-lived API key; access tokens are never persisted.
 - Rotate the encryption key by adding a `key_version` migration step (column exists; only version 1 is implemented).
 
 ## Sync
