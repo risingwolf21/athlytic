@@ -90,6 +90,7 @@ export default function MetricDetailPage() {
           format={(v) => format(metric, v).full}
           formatTick={(v) => format(metric, v).text}
           band={baseline}
+          {...(metric.startsWith('bodyBattery') ? { bounds: { min: 0, max: 100 } } : metric === 'steps' ? { bounds: { min: 0 } } : {})}
           bandLabel={t('common.personalRange')}
           {...(compare ? { compare: comparePoints(records, metric, span, granularity, points.length), compareLabel: t('analytics.previousPeriod') } : {})}
           lowCoverageLabel={t('common.lowCoverage')}

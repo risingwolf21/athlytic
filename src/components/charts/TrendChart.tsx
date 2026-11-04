@@ -28,6 +28,8 @@ interface TrendChartProps {
   compareLabel?: string
   lowCoverageLabel?: string
   showYAxis?: boolean
+  /** Hard limits of the value axis, e.g. 0–100 for scores. */
+  bounds?: { min?: number; max?: number }
 }
 
 function xTick(date: string, granularity: Granularity): string {
@@ -43,16 +45,18 @@ function xTick(date: string, granularity: Granularity): string {
   }
 }
 
-/** Round tick values (1, 2, 5 × 10ⁿ) inside the domain, so axes read 40, 50, 60 instead of 34, 54, 74. */
-function niceTicks(min: number, max: number, target: number): number[] {
+/** Round tick values (1, 2, 5 × 10ⁿ); the domain is widened to the outer ticks so grid lines and labels always coincide. */
+function niceScale(min: number, max: number, target: number, fixedMin?: number, fixedMax?: number): { ticks: number[]; domain: [number, number] } {
   const rough = (max - min) / target
-  if (!(rough > 0)) return [min]
+  if (!(rough > 0)) return { ticks: [min], domain: [min - 1, max + 1] }
   const magnitude = 10 ** Math.floor(Math.log10(rough))
   const residual = rough / magnitude
   const step = (residual < 1.5 ? 1 : residual < 3 ? 2 : residual < 7 ? 5 : 10) * magnitude
+  const lo = fixedMin ?? Math.floor(min / step + 1e-9) * step
+  const hi = fixedMax ?? Math.ceil(max / step - 1e-9) * step
   const ticks: number[] = []
-  for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-9; v += step) ticks.push(Math.round(v / step) * step)
-  return ticks
+  for (let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + step * 1e-9; v += step) ticks.push(Math.round(v / step) * step + 0)
+  return { ticks, domain: [lo, hi] }
 }
 
 interface Row {
@@ -92,7 +96,7 @@ function ChartTooltip({ active, payload, format, granularity, color, compareLabe
 }
 
 /** Interactive time-series chart (touch + hover tooltip) with optional baseline band and previous-period overlay. */
-export function TrendChart({ data, granularity = 'day', color, variant = 'area', format, formatTick, height = 220, band, bandLabel, compare, compareLabel, lowCoverageLabel, showYAxis = true }: TrendChartProps) {
+export function TrendChart({ data, granularity = 'day', color, variant = 'area', format, formatTick, height = 220, band, bandLabel, compare, compareLabel, lowCoverageLabel, showYAxis = true, bounds }: TrendChartProps) {
   const gradientId = useId()
   const rows = useMemo<Row[]>(() => data.map((p, i) => ({ date: p.date, v: p.value, c: compare?.[i] ?? null, coverage: p.coverage ?? 1 })), [data, compare])
 
@@ -101,22 +105,26 @@ export function TrendChart({ data, granularity = 'day', color, variant = 'area',
   const highs = band ? [...values, band.high] : values
   const rawMin = lows.length ? Math.min(...lows) : 0
   const rawMax = highs.length ? Math.max(...highs) : 1
-  const pad = (rawMax - rawMin || 1) * 0.12
-  const domain: [number, number] = variant === 'bar' ? [0, rawMax * 1.1 || 1] : [Math.max(0, rawMin - pad), rawMax + pad]
+  const pad = (rawMax - rawMin || 1) * 0.08
+  const lowEdge = bounds?.min ?? (variant === 'bar' ? 0 : Math.max(0, rawMin - pad))
+  const highEdge = bounds?.max ?? rawMax + pad
+  const { ticks, domain } = niceScale(lowEdge, highEdge, 4, bounds?.min ?? (variant === 'bar' ? 0 : undefined), bounds?.max)
+  const tickLabel = formatTick ?? format
+  const axisWidth = Math.max(...ticks.map((t) => tickLabel(t).length), 2) * 6.6 + 10
 
   return (
     <div style={{ height }} className="w-full select-none">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={rows} margin={{ top: 8, right: 4, bottom: 0, left: showYAxis ? -12 : 0 }}>
+        <ComposedChart data={rows} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stopColor={color} stopOpacity={0.32} />
               <stop offset="100%" stopColor={color} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 4" />
+          <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 4" horizontalValues={ticks} />
           <XAxis dataKey="date" tickFormatter={(d: string) => xTick(d, granularity)} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} interval="preserveStartEnd" minTickGap={28} />
-          <YAxis hide={!showYAxis} domain={domain} tickLine={false} axisLine={false} width={44} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} ticks={niceTicks(domain[0], domain[1], 4)} tickFormatter={(v: number) => (formatTick ?? format)(v)} />
+          <YAxis hide={!showYAxis} domain={domain} tickLine={false} axisLine={false} width={axisWidth} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} ticks={ticks} interval={0} tickFormatter={(v: number) => tickLabel(v)} />
           {band && <ReferenceArea y1={band.low} y2={band.high} fill={color} fillOpacity={0.1} stroke="none" ifOverflow="extendDomain" label={bandLabel ? { value: bandLabel, position: 'insideTopLeft', fontSize: 10, fill: 'var(--muted-foreground)' } : undefined} />}
           {band && <ReferenceLine y={band.median} stroke={color} strokeOpacity={0.35} strokeDasharray="4 4" />}
           <Tooltip cursor={{ stroke: 'var(--muted-foreground)', strokeOpacity: 0.4, strokeDasharray: '3 3' }} content={(props) => <ChartTooltip {...(props as unknown as TooltipProps)} format={format} granularity={granularity} color={color} {...(compareLabel ? { compareLabel } : {})} {...(lowCoverageLabel ? { lowCoverageLabel } : {})} />} />
