@@ -24,6 +24,14 @@ export const metrics = {
   distanceKm: metric('Distanz', 'Zurückgelegte Strecke aller Aktivitäten.'),
   durationMin: metric('Trainingszeit', 'Dauer aller Aktivitäten.'),
   elevationGainM: metric('Höhenmeter', 'Aufgestiegene Höhenmeter aller Aktivitäten.'),
+  spo2Avg: metric('Blutsauerstoff (SpO₂)', 'Durchschnittliche Sauerstoffsättigung des Tages. Werte um 95–100 % gelten bei Gesunden als normal; die Messung am Handgelenk ist ungenau und kein medizinischer Wert.'),
+  respirationAvg: metric('Atemfrequenz', 'Durchschnittliche Atemzüge pro Minute im Wachzustand, aus Herzschlagdaten abgeleitet.'),
+  hydrationMl: metric('Flüssigkeit', 'Manuell oder per Uhr eingetragene Trinkmenge des Tages.'),
+  highStressMin: metric('Hoher Stress', 'Minuten des Tages im Stressbereich „hoch“ laut Uhr.'),
+  sleepDebtMin: metric('Schlafdefizit', 'Differenz zwischen dem von der Uhr geschätzten Schlafbedarf und der tatsächlichen Schlafzeit. Ein Wert von 0 heißt: Bedarf gedeckt.'),
+  sleepStress: metric('Stress im Schlaf', 'Durchschnittlicher Stresswert während des Schlafs. Niedriger ist besser.'),
+  weightKg: metric('Gewicht', 'Gewicht aus Waage oder manueller Eingabe. Tagesschwankungen von 1–2 kg sind normal.'),
+  bodyFatPct: metric('Körperfett', 'Körperfettanteil laut Waage. Waagen messen per Bioimpedanz und schwanken je nach Flüssigkeitshaushalt.'),
 }
 
 export const records = {
@@ -91,6 +99,22 @@ export const insightMessages = {
       'Dein geschätzter Erholungswert ist niedrig. Am schwächsten fiel {{weakestText}} aus. Berücksichtigt wurden {{completeness}} % der möglichen Eingangsdaten.',
     ),
   },
+  sleep: {
+    debt: msg(
+      'Schlafdefizit in dieser Woche',
+      'In {{nights}} der letzten 7 Nächte lag dein Schlaf im Schnitt {{minutes}} Minuten unter dem von der Uhr geschätzten Bedarf. Mehr Schlaf oder frühere Schlafenszeiten können das ausgleichen.',
+    ),
+  },
+  intensity: {
+    balanced: msg(
+      'Ausgewogene Intensitätsverteilung',
+      'In den letzten 28 Tagen ({{activities}} Aktivitäten, {{hours}} h) lagen {{easy}} % der Zeit im leichten Bereich (Zone 1–2), {{moderate}} % in Zone 3 und {{hard}} % in Zone 4–5.',
+    ),
+    moderate: msg(
+      'Viel Training im mittleren Bereich',
+      'In den letzten 28 Tagen ({{activities}} Aktivitäten, {{hours}} h) lagen {{moderate}} % der Zeit in Zone 3 und nur {{easy}} % im leichten Bereich. Viele Ausdauerplanungen setzen auf mehr leichte und einzelne wirklich harte Einheiten – ob das für dich passt, hängt von deinem Ziel ab.',
+    ),
+  },
   record: {
     longestDistance: msg('Neue Bestleistung: längste Distanz', '{{value}}{{sport}} – bisher {{previous}}.'),
     longestDuration: msg('Neue Bestleistung: längste Aktivität', '{{value}} – bisher {{previous}}.'),
@@ -153,5 +177,15 @@ export const methods = {
     'Persönliche Bestleistungen',
     'Der beste Einzelwert einer Aktivität oder eines Tages über alle importierten Daten.',
     'Gilt nur für den importierten Zeitraum. Frühere Bestleistungen vor dem Import sind nicht bekannt.',
+  ),
+  sleepDebt: method(
+    'Schlafdefizit',
+    'Pro Nacht: geschätzter Schlafbedarf der Uhr minus tatsächlich geschlafene Zeit, nie unter null. Gemeldet wird ein Defizit, wenn der Durchschnitt der letzten 7 Nächte mindestens 45 Minuten beträgt.',
+    'Der Bedarf ist eine Schätzung der Uhr und berücksichtigt Training, HRV und Nickerchen. Er ist kein medizinischer Richtwert.',
+  ),
+  intensityDistribution: method(
+    'Intensitätsverteilung',
+    'Zeit in den Herzfrequenzzonen der letzten 28 Tage, zusammengefasst in leicht (Zone 1–2), mittel (Zone 3) und hart (Zone 4–5).',
+    'Nur Aktivitäten mit Zonendaten zählen. Die Zonen hängen von deiner eingestellten Maximalfrequenz ab; eine ideale Verteilung gibt es nicht, sie hängt vom Trainingsziel ab.',
   ),
 }

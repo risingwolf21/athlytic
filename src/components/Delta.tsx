@@ -22,10 +22,10 @@ export function Delta({ metric, ratio, className }: DeltaProps) {
   return (
     <span
       className={cn('inline-flex items-center gap-0.5 text-xs font-medium tabular', flat || good === null ? 'text-muted-foreground' : good ? 'text-positive' : 'text-attention', className)}
-      aria-label={t('common.changeVsPrevious', { value: formatPercent(ratio) })}
+      aria-label={t('common.changeVsPrevious', { value: formatPercent(flat ? 0 : ratio) })}
     >
       <Icon className="size-3.5" aria-hidden />
-      {formatPercent(ratio)}
+      {formatPercent(flat ? 0 : ratio)}
     </span>
   )
 }

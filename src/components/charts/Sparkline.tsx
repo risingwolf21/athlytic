@@ -8,7 +8,7 @@ interface SparklineProps {
   className?: string
 }
 
-/** Tiny dependency-free trend line for metric cards. Gaps (null) break the line instead of being interpolated. */
+/** Tiny dependency-free trend line for metric cards. Gaps (null) break the line instead of being interpolated, unless most values are missing (e.g. weigh-ins), where the points are joined. */
 export function Sparkline({ values, color, height = 36, className }: SparklineProps) {
   const id = useId()
   const nums = values.filter((v): v is number => v !== null)
@@ -22,10 +22,12 @@ export function Sparkline({ values, color, height = 36, className }: SparklinePr
   const x = (i: number) => (i / (values.length - 1)) * width
   const y = (v: number) => height - pad - ((v - min) / span) * (height - pad * 2)
 
+  const sparse = nums.length < values.length / 2
   const segments: string[][] = []
   let current: string[] = []
   values.forEach((v, i) => {
     if (v === null) {
+      if (sparse) return
       if (current.length) segments.push(current)
       current = []
     } else current.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`)

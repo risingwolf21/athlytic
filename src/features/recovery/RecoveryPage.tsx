@@ -20,6 +20,8 @@ import { KindBadge } from '@/components/KindBadge'
 import { EmptyState, ErrorState, PageHeader, PageSkeleton, Panel, Section } from '@/components/page'
 import { Segmented } from '@/components/Segmented'
 import { trendPoints, windowEndingAt } from '@/features/analytics/series'
+import { BatteryEvents, HrvStatusCard, StressBreakdown } from '@/features/recovery/DayDetail'
+import { SleepDetail } from '@/features/recovery/SleepDetail'
 import { useFitnessData } from '@/hooks/use-fitness-data'
 import { formatClock, formatDay, formatHours, formatMetricValue, formatNumber, formatDuration } from '@/lib/format'
 import { METRIC_STYLE } from '@/lib/metric-style'
@@ -63,9 +65,9 @@ export default function RecoveryPage() {
   }, [bundle, today])
 
   const intraday = useMemo(() => {
-    if (!bundle || !today) return { stress: null, battery: null }
-    const on = (metric: 'stress' | 'body_battery') => [...bundle.intraday].filter((s) => s.metric === metric && s.date <= today).sort((a, b) => b.date.localeCompare(a.date))[0] ?? null
-    return { stress: on('stress'), battery: on('body_battery') }
+    if (!bundle || !today) return { stress: null, battery: null, hrv: null, spo2: null }
+    const on = (metric: 'stress' | 'body_battery' | 'hrv' | 'spo2') => [...bundle.intraday].filter((s) => s.metric === metric && s.date <= today).sort((a, b) => b.date.localeCompare(a.date))[0] ?? null
+    return { stress: on('stress'), battery: on('body_battery'), hrv: on('hrv'), spo2: on('spo2') }
   }, [bundle, today])
 
   const relation = useMemo(() => {
@@ -89,7 +91,8 @@ export default function RecoveryPage() {
   )
 
   const detail = latest.recoveryDetail
-  const hrvStatus = bundle?.daily.find((d) => d.date === today)?.hrvStatus
+  const daily = bundle?.daily.find((d) => d.date === today) ?? null
+  const hasVitals = records.some((r) => r.spo2Avg !== null || r.respirationAvg !== null)
 
   return (
     <div className="space-y-6">
@@ -146,13 +149,7 @@ export default function RecoveryPage() {
                 )}
               </div>
               <SleepStagesBar deepS={sleep.deepS} lightS={sleep.lightS} remS={sleep.remS} awakeS={sleep.awakeS} labels={{ deep: t('recovery.stages.deep'), light: t('recovery.stages.light'), rem: t('recovery.stages.rem'), awake: t('recovery.stages.awake') }} />
-              {(sleep.avgSpo2 !== null || sleep.avgRespiration !== null) && (
-                <p className="text-xs text-muted-foreground">
-                  {sleep.avgSpo2 !== null && `${t('recovery.spo2')} ${formatNumber(sleep.avgSpo2)} %`}
-                  {sleep.avgSpo2 !== null && sleep.avgRespiration !== null && ' · '}
-                  {sleep.avgRespiration !== null && `${t('recovery.respiration')} ${formatNumber(sleep.avgRespiration, 1)} ${t('recovery.perMinute')}`}
-                </p>
-              )}
+              <SleepDetail sleep={sleep} />
             </>
           ) : (
             <p className="text-sm text-muted-foreground">{t('recovery.noSleep')}</p>
@@ -162,11 +159,31 @@ export default function RecoveryPage() {
 
       <MetricTrend metric="sleepHours" title={t('recovery.sleepTrend')} records={records} today={today} days={days} variant="bar" />
       <MetricTrend metric="hrv" title={t('recovery.hrvTrend')} records={records} today={today} days={days} />
-      {hrvStatus && <p className="-mt-3 px-1 text-xs text-muted-foreground">{t('recovery.hrvStatus', { status: t(`recovery.hrvStatuses.${hrvStatus}`) })}</p>}
+      {daily && (
+        <Section title={t('dayDetail.hrvTitle')}>
+          <Panel>
+            <HrvStatusCard daily={daily} />
+          </Panel>
+        </Section>
+      )}
       <MetricTrend metric="restingHr" title={t('recovery.rhrTrend')} records={records} today={today} days={days} />
       <MetricTrend metric="avgStress" title={t('recovery.stressTrend')} records={records} today={today} days={days} variant="area" />
+      {daily && (daily.stressRestS !== null || daily.stressHighS !== null) && (
+        <Section title={t('dayDetail.stressTitle', { day: formatDay(daily.date, 'medium') })} action={<KindBadge kind="measured" />}>
+          <Panel className="space-y-3">
+            <StressBreakdown daily={daily} />
+            <p className="text-xs text-muted-foreground">{t('dayDetail.stressNote')}</p>
+          </Panel>
+        </Section>
+      )}
+      {hasVitals && (
+        <>
+          <MetricTrend metric="spo2Avg" title={t('metrics.spo2Avg.label')} records={records} today={today} days={days} />
+          <MetricTrend metric="respirationAvg" title={t('metrics.respirationAvg.label')} records={records} today={today} days={days} />
+        </>
+      )}
 
-      {(intraday.stress || intraday.battery) && (
+      {(intraday.stress || intraday.battery || intraday.hrv || intraday.spo2) && (
         <Section title={t('recovery.dayCurve')}>
           <Panel className="space-y-5">
             {intraday.battery && (
@@ -175,6 +192,25 @@ export default function RecoveryPage() {
                   {t('metrics.bodyBatteryHigh.label')} <span className="font-normal text-muted-foreground">· {formatDay(intraday.battery.date, 'medium')}</span>
                 </p>
                 <IntradayChart points={intraday.battery.points} color="var(--m-battery)" unit="" domain={[0, 100]} />
+              </div>
+            )}
+            {daily && (
+              <BatteryEvents daily={daily} />
+            )}
+            {intraday.hrv && (
+              <div>
+                <p className="mb-1 text-sm font-medium">
+                  {t('metrics.hrv.label')} <span className="font-normal text-muted-foreground">· {formatDay(intraday.hrv.date, 'medium')}</span>
+                </p>
+                <IntradayChart points={intraday.hrv.points} color="var(--m-hrv)" unit="ms" />
+              </div>
+            )}
+            {intraday.spo2 && (
+              <div>
+                <p className="mb-1 text-sm font-medium">
+                  {t('metrics.spo2Avg.label')} <span className="font-normal text-muted-foreground">· {formatDay(intraday.spo2.date, 'medium')}</span>
+                </p>
+                <IntradayChart points={intraday.spo2.points} color="var(--m-hr)" unit="%" domain={[80, 100]} />
               </div>
             )}
             {intraday.stress && (
