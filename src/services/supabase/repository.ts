@@ -86,12 +86,19 @@ export function createSupabaseRepository(): FitnessRepository {
       if (activityRes.error) throw new Error(activityRes.error.message)
       if (!activityRes.data) return null
       const activity = { ...toActivity(activityRes.data), notes: (notesRes.data as { notes: string | null } | null)?.notes ?? null }
-      if (detailRes.data) return toDetail(activity, detailRes.data)
+      const stored = detailRes.data as { samples?: { t?: unknown[] } | null } | null
+      if (stored && stored.samples?.t?.length) return toDetail(activity, detailRes.data as Parameters<typeof toDetail>[1])
 
-      // Details are fetched lazily from the provider on first open, then stored.
-      await invoke('garmin-sync', { kind: 'activity-detail', activityId })
+      // Details are fetched lazily from the provider on first open, then stored. Rows without samples
+      // (stored before track import existed, or for activities without a file) are retried on open.
+      try {
+        await invoke('garmin-sync', { kind: 'activity-detail', activityId })
+      } catch (error) {
+        if (!stored) throw error
+      }
       const retry = await supabase.from('activity_details').select('laps, samples').eq('activity_id', activityId).maybeSingle()
-      return retry.data ? toDetail(activity, retry.data) : null
+      const row = retry.data ?? detailRes.data
+      return row ? toDetail(activity, row) : null
     },
 
     async saveActivityNotes(activityId, notes) {

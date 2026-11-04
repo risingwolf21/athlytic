@@ -5,6 +5,7 @@ import { mapSleep, toEpochSeconds } from './map.ts'
 import { GarminProvider } from './provider.ts'
 import { normalizeGarminActivityDetails } from './normalize.ts'
 import { GarminApiError } from './types.ts'
+import { decodeActivityFile, decodeFit } from './fit.ts'
 
 const BASE = 'https://personal.connectapi.garmin.com'
 const NOW = new Date('2026-11-04T10:00:00Z')
@@ -89,6 +90,7 @@ const responses: Record<string, (url: URL) => unknown> = {
   ],
   'activity-service/activity/98765': () => ({
     activityId: 98765,
+    activityTypeDTO: { typeKey: 'running' },
     splitSummaries: [
       { splitType: 'ASCENT_SPLIT', noOfSplits: 1, startTimeGMT: '2026-11-03T06:10:00.0', duration: 60, distance: 100 },
       { splitType: 'MARKER_KILOMETER', noOfSplits: 1, startTimeGMT: '2026-11-03T06:00:00.0', duration: 300, distance: 1_000, averageSpeed: 3.33, averageHR: 140 },
@@ -237,4 +239,76 @@ Deno.test('pages through long activity lists', async () => {
   const payload = await new HttpGarminClient({ baseUrl: BASE, apiKey: 'k', fetchImpl: pagedFetch, now: () => NOW }).fetchRange('2026-11-01', '2026-11-03')
   assert.deepEqual(seen, ['0', '50'])
   assert.equal(payload.activities.length, 53)
+})
+
+/** Builds a FIT file with one record definition, two records (one using a compressed timestamp) and one lap. */
+function buildFit(): Uint8Array {
+  const body: number[] = []
+  const u16 = (v: number) => [v & 0xff, v >> 8]
+  const u32 = (v: number) => [v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff]
+  const s32 = (v: number) => u32(v >>> 0)
+  const semi = (deg: number) => Math.round((deg * 2 ** 31) / 180)
+  // definition: local 0 = record(20): timestamp(253,u32) lat(0,s32) lng(1,s32) alt(2,u16) hr(3,u8) cad(4,u8) dist(5,u32) speed(6,u16)
+  body.push(0x40, 0, 0, ...u16(20), 8, 253, 4, 6, 0, 4, 5, 1, 4, 5, 2, 2, 4, 3, 1, 2, 4, 1, 2, 5, 4, 6, 6, 2, 4)
+  const T0 = 1_793_685_600 - 631_065_600
+  const record = (t: number, lat: number, lng: number, alt: number, hr: number, cad: number, dist: number, speed: number) =>
+    [0x00, ...u32(t), ...s32(semi(lat)), ...s32(semi(lng)), ...u16((alt + 500) * 5), hr, cad, ...u32(dist * 100), ...u16(speed * 1000)]
+  body.push(...record(T0, 49.0, 8.4, 120, 140, 80, 0, 3))
+  // local 2 = record without a timestamp field, used with a compressed timestamp header (offset = (T0 + 1) & 0x1f)
+  body.push(0x42, 0, 0, ...u16(20), 7, 0, 4, 5, 1, 4, 5, 2, 2, 4, 3, 1, 2, 4, 1, 2, 5, 4, 6, 6, 2, 4)
+  const cr = record(0, 49.001, 8.401, 121, 142, 81, 3, 3)
+  body.push(0x80 | (2 << 5) | ((T0 + 1) & 0x1f), ...cr.slice(5))
+  // definition: local 1 = lap(19): timestamp(253) start_time(2)
+  body.push(0x41, 0, 0, ...u16(19), 2, 253, 4, 6, 2, 4, 6)
+  body.push(0x01, ...u32(T0 + 2), ...u32(T0))
+  const header = [14, 0x20, 0, 0, ...u32(body.length), 0x2e, 0x46, 0x49, 0x54, 0, 0]
+  return new Uint8Array([...header, ...body, 0, 0])
+}
+
+Deno.test('decodes records and laps from a FIT file', () => {
+  const fit = decodeFit(buildFit())
+  assert.equal(fit.records.length, 2)
+  assert.equal(fit.records[0]!.time, 1_793_685_600)
+  assert.equal(fit.records[1]!.time, 1_793_685_601)
+  assert.ok(Math.abs(fit.records[0]!.lat! - 49.0) < 1e-6)
+  assert.ok(Math.abs(fit.records[0]!.lng! - 8.4) < 1e-6)
+  assert.equal(fit.records[0]!.altitudeM, 120)
+  assert.equal(fit.records[1]!.heartRate, 142)
+  assert.equal(fit.records[1]!.distanceM, 3)
+  assert.equal(fit.records[1]!.speedMs, 3)
+  assert.equal(fit.laps.length, 1)
+  assert.equal(fit.laps[0]!.startTime, 1_793_685_600)
+})
+
+Deno.test('rejects files that are not FIT', () => {
+  assert.throws(() => decodeFit(new Uint8Array(20)))
+})
+
+Deno.test('unzips a deflated archive that contains a FIT file', async () => {
+  const fit = buildFit()
+  const deflated = new Uint8Array(await new Response(new Blob([fit.slice()]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer())
+  const name = new TextEncoder().encode('1_ACTIVITY.fit')
+  const le = (n: number, bytes: number) => Array.from({ length: bytes }, (_, i) => (n >>> (8 * i)) & 0xff)
+  const local = [...le(0x04034b50, 4), ...le(20, 2), ...le(0, 2), ...le(8, 2), ...le(0, 4), ...le(0, 4), ...le(deflated.length, 4), ...le(fit.length, 4), ...le(name.length, 2), ...le(0, 2), ...name]
+  const centralOffset = local.length + deflated.length
+  const central = [...le(0x02014b50, 4), ...le(20, 2), ...le(20, 2), ...le(8, 2), ...le(8, 2), ...le(0, 4), ...le(0, 4), ...le(deflated.length, 4), ...le(fit.length, 4), ...le(name.length, 2), ...le(0, 2), ...le(0, 2), ...le(0, 2), ...le(0, 2), ...le(0, 4), ...le(0, 4), ...name]
+  const eocd = [...le(0x06054b50, 4), ...le(0, 2), ...le(0, 2), ...le(1, 2), ...le(1, 2), ...le(central.length, 4), ...le(centralOffset, 4), ...le(0, 2)]
+  const zip = new Uint8Array([...local, ...deflated, ...central, ...eocd])
+  assert.equal((await decodeActivityFile(zip)).records.length, 2)
+})
+
+Deno.test('activity detail uses the downloaded FIT file for route and series', async () => {
+  const fit = buildFit()
+  const base = mockFetch([])
+  const withFile = ((input: URL | string, init?: RequestInit) =>
+    String(input).includes('download-service/files/activity/98765') ? Promise.resolve(new Response(fit.slice())) : base(input, init)) as typeof fetch
+  const provider = new GarminProvider(new HttpGarminClient({ baseUrl: BASE, apiKey: 'test-key', fetchImpl: withFile, now: () => NOW }), () => NOW)
+  const bundle = await provider.fetchRange('2026-11-01', '2026-11-03')
+  const detail = await provider.fetchActivityDetail(bundle.activities[0]!)
+  assert.ok(detail)
+  assert.equal(detail!.samples.t.length, 2)
+  assert.deepEqual(detail!.samples.t, [0, 1])
+  assert.ok(Math.abs(detail!.samples.lat[0]! - 49) < 1e-6)
+  assert.equal(detail!.samples.cadence[0], 160)
+  assert.equal(detail!.laps.length, 1)
 })

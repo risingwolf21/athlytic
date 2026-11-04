@@ -9,6 +9,7 @@ import type {
   ApiSummarizedActivity,
   GarminTimestamp,
 } from './api-types.ts'
+import type { FitActivity } from './fit.ts'
 import type {
   GarminActivity,
   GarminActivityDetails,
@@ -227,4 +228,28 @@ export function mapActivityDetails(a: ApiActivitySummary): GarminActivityDetails
     .filter((s): s is GarminSplit => s !== null)
     .sort((x, y) => x.startTimeInSeconds - y.startTimeInSeconds)
   return { summaryId: String(a.activityId), samples: [], laps: [], splits }
+}
+
+const MAX_SAMPLES = 2_000
+const STEP_SPORTS = /running|walking|hiking|treadmill/i
+
+/** Details from the original FIT file: GPS track, per-second series and laps. Samples are thinned to keep the stored row small. */
+export function mapFitDetails(fit: FitActivity, activityId: string, typeKey: string | undefined): GarminActivityDetails {
+  const stride = Math.max(1, Math.ceil(fit.records.length / MAX_SAMPLES))
+  const stepsBased = STEP_SPORTS.test(typeKey ?? '')
+  const samples = fit.records
+    .filter((_, i) => i % stride === 0)
+    .map((r) => ({
+      startTimeInSeconds: r.time,
+      latitudeInDegree: r.lat,
+      longitudeInDegree: r.lng,
+      elevationInMeters: r.altitudeM,
+      heartRateInBeatsPerMinute: r.heartRate,
+      speedMetersPerSecond: r.speedMs,
+      // FIT running cadence counts strides of one leg; Garmin Connect shows steps per minute.
+      stepsPerMinute: stepsBased && r.cadence != null ? r.cadence * 2 : undefined,
+      bikeCadenceInRPM: !stepsBased ? r.cadence : undefined,
+      totalDistanceInMeters: r.distanceM,
+    }))
+  return { summaryId: activityId, samples, laps: fit.laps.map((l) => ({ startTimeInSeconds: l.startTime })) }
 }

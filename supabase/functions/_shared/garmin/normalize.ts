@@ -205,7 +205,7 @@ export function normalizeGarminActivityDetails(activity: Activity, details: Garm
     samples.distance.push(s.totalDistanceInMeters ?? null)
   }
 
-  if (!details.samples.length && details.splits?.length) {
+  if (!details.laps.length && details.splits?.length) {
     return { activity, laps: lapsFromSplits(details.splits, startEpoch), samples }
   }
 

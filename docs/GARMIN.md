@@ -45,13 +45,17 @@ If connecting fails, the toast shows the status: 401 = key rejected/expired, 403
 | Intraday Body Battery | `GET /wellness-service/wellness/bodyBattery/reports/daily?startDate&endDate` | max 31 days |
 | Intraday heart rate | `GET /wellness-service/wellness/dailyHeartRate?date` | one call per day, **only the last 7 days** |
 | Activities | `GET /activitylist-service/activities/search/activities?startDate&endDate&start&limit` | paged (50) |
-| Activity detail | `GET /activity-service/activity/{id}` | lap aggregates from `splitSummaries` |
+| Activity detail | `GET /activity-service/activity/{id}` | sport type and lap aggregates from `splitSummaries` (fallback) |
+| Activity file | `GET /download-service/files/activity/{id}` | original FIT file (raw or ZIP-wrapped) |
 
 Known limitations of the Personal API (as of the spec):
 
-- **No GPS track or per-second samples as JSON.** Only the original FIT file is downloadable
-  (`/download-service/files/activity/{id}`); parsing it would need a FIT decoder and is not implemented. Activity
-  detail pages therefore show laps/splits but no route map or series charts for Garmin-imported activities.
+- **No GPS track or per-second samples as JSON.** They are read from the original FIT file
+  (`/download-service/files/activity/{id}`), decoded by the dependency-free decoder in
+  `_shared/garmin/fit.ts` (ZIP wrappers are unwrapped). Route, heart rate, speed, elevation and cadence series are
+  thinned to at most 2000 points. Running/walking cadence is doubled (FIT stores one leg) to show steps per minute.
+  Activities without a file (manual or indoor without GPS) fall back to laps from `splitSummaries` and show no map.
+  Detail rows stored without samples are refetched when the activity is opened.
 - **No intraday stress series** (only daily averages and proportions), so the stress timeline is empty.
 - **No daily VO2max or training-readiness endpoint.** VO2max is taken from the day's latest activity that reports one.
 - Heart-rate zone times per activity come from `hrTimeInZone_1…5` on the activity summary.

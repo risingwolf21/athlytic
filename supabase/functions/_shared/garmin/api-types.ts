@@ -136,6 +136,7 @@ export interface ApiSplitSummary {
 /** Response of `/activity-service/activity/{activityId}`. */
 export interface ApiActivitySummary {
   activityId: number
+  activityTypeDTO?: ApiActivityType
   summaryDTO?: { startTimeGMT?: GarminTimestamp }
   splitSummaries?: ApiSplitSummary[]
 }

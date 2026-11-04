@@ -10,12 +10,14 @@ import type {
   ApiSummarizedActivity,
   ApiUserSettings,
 } from './api-types.ts'
+import { decodeActivityFile } from './fit.ts'
 import {
   heartRateOffsets,
   mapActivity,
   mapActivityDetails,
   mapBodyBattery,
   mapDailySummary,
+  mapFitDetails,
   mapHrv,
   mapSleep,
 } from './map.ts'
@@ -102,12 +104,23 @@ export class HttpGarminClient implements GarminClient {
   }
 
   async fetchActivityDetails(summaryId: string): Promise<GarminActivityDetails | null> {
+    let summary: ApiActivitySummary
     try {
-      return mapActivityDetails(await this.get<ApiActivitySummary>(`activity-service/activity/${encodeURIComponent(summaryId)}`))
+      summary = await this.get<ApiActivitySummary>(`activity-service/activity/${encodeURIComponent(summaryId)}`)
     } catch (error) {
       if (error instanceof GarminApiError && error.status === 404) return null
       throw error
     }
+    const fallback = mapActivityDetails(summary)
+    try {
+      const file = await this.getBytes(`download-service/files/activity/${encodeURIComponent(summaryId)}`)
+      const fit = await decodeActivityFile(file)
+      if (fit.records.length) return { ...mapFitDetails(fit, summaryId, summary.activityTypeDTO?.typeKey), splits: fallback.splits }
+    } catch (error) {
+      // No file (e.g. manual activity) or an undecodable one: keep the lap aggregates from the summary.
+      if (error instanceof GarminApiError && (error.status === 401 || error.status === 429)) throw error
+    }
+    return fallback
   }
 
   private async fetchWindow(start: string, end: string, payload: GarminRangePayload): Promise<void> {
@@ -222,19 +235,27 @@ export class HttpGarminClient implements GarminClient {
     return this.obtainAccessToken()
   }
 
-  private async get<T>(path: string, params: Record<string, string> = {}): Promise<T> {
+  private async request(path: string, params: Record<string, string>, accept: string): Promise<Response> {
     const url = this.url(path)
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
     for (let attempt = 0; ; attempt++) {
       const token = await this.currentToken(attempt > 0)
-      const res = await this.fetchImpl(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } })
+      const res = await this.fetchImpl(url, { headers: { Authorization: `Bearer ${token}`, Accept: accept } })
       if (res.status === 401 && attempt === 0) continue
       if (!res.ok) {
         const retry = Number(res.headers.get('retry-after'))
         throw new GarminApiError(`Garmin API ${res.status} for ${path}`, res.status, Number.isFinite(retry) && retry > 0 ? retry : null)
       }
-      const text = await res.text()
-      return (text ? JSON.parse(text) : null) as T
+      return res
     }
+  }
+
+  private async get<T>(path: string, params: Record<string, string> = {}): Promise<T> {
+    const text = await (await this.request(path, params, 'application/json')).text()
+    return (text ? JSON.parse(text) : null) as T
+  }
+
+  private async getBytes(path: string): Promise<Uint8Array> {
+    return new Uint8Array(await (await this.request(path, {}, '*/*')).arrayBuffer())
   }
 }
