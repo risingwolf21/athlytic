@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "compilerOptions": { "paths": { "@/*": ["./src/*"], "@shared/*": ["./supabase/functions/_shared/*"] } },
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}
