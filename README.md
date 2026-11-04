@@ -48,7 +48,7 @@ The local stack uses ports 55321–55329 so it does not collide with a default S
 ## Deployment (GitHub Pages)
 
 `.github/workflows/pages.yml` builds in demo mode with `VITE_BASE=/<repository>/` and publishes `dist/`.
-To use a real backend, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as repository variables and
+To use a real backend, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as repository variables (or secrets) and
 host the functions on a Supabase project (note: a hosted project may incur costs).
 
 ## Installing on a phone
